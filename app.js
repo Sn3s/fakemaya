@@ -20,6 +20,7 @@ const defaultState = {
     rate: 8,
     account: "8189 3753 6162",
   },
+  depositFlow: null,
   transactions: [
     { title: "Created account", detail: "japan", age: "10 minutes ago", amount: "" },
     { title: "Transferred to", detail: "Maya Black E... (9278)", age: "22 hours ago", amount: "- ₱12,500.00" },
@@ -58,6 +59,27 @@ function go(tab) {
 
 function openView(view) {
   setState({ view });
+}
+
+function startDepositFlow() {
+  state.depositFlow = {
+    step: 1,
+    source: null,
+    destination: null,
+    amount: 0,
+  };
+  setState({ view: "depositFlow" });
+}
+
+function updateDepositFlow(patch) {
+  state.depositFlow = { ...state.depositFlow, ...patch };
+  saveState();
+  render();
+}
+
+function resetDepositFlow() {
+  state.depositFlow = null;
+  setState({ view: "home" });
 }
 
 function addTransaction(title, detail, amount = "") {
@@ -194,7 +216,7 @@ function renderSavings() {
       amount: state.savings + state.timeDeposit + state.goal.balance,
       label: "Total savings",
       actions: `
-        <button class="pill-btn" onclick="openMoneySheet('deposit')"><span>${icon("in")}</span> Deposit</button>
+        <button class="pill-btn" onclick="startDepositFlow()"><span>${icon("in")}</span> Deposit</button>
         <button class="pill-btn" onclick="openMoneySheet('transfer')"><span>${icon("out")}</span> Transfer</button>
       `,
     })}
@@ -296,7 +318,7 @@ function renderSavingsDetail() {
         <h1>${money(state.savings)} <button class="eye" onclick="setState({ hidden: !state.hidden })">${icon("eye")}</button></h1>
       </div>
       <div class="detail-actions">
-        <button class="pill-btn solid" onclick="openMoneySheet('deposit')">${icon("in")} Deposit</button>
+        <button class="pill-btn solid" onclick="startDepositFlow()">${icon("in")} Deposit</button>
         <button class="pill-btn solid" onclick="openMoneySheet('transfer')">${icon("out")} Transfer</button>
       </div>
       <div class="drag-handle"></div>
@@ -347,6 +369,170 @@ function renderGoalDetail() {
       ${transactionsPanel()}
     </section>
   `;
+}
+
+function renderDepositFlow() {
+  const flow = state.depositFlow || { step: 1 };
+  const titles = {
+    1: "Select a fund source",
+    2: "Select a destination",
+    3: `Deposit to ${flow.destination === "goal" ? state.goal.name : "my account"}`,
+    4: "Review deposit",
+  };
+  return `
+    <section class="deposit-flow">
+      <div class="statusbar"><span>10:15</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">33</span></span></div>
+      <div class="flow-head">
+        <button class="back" onclick="depositBack()" aria-label="Back">‹</button>
+        <div class="flow-progress" style="--step:${flow.step}"><span></span></div>
+        <b>${flow.step}/4</b>
+      </div>
+      <h1 class="flow-title">${titles[flow.step]}</h1>
+      ${flow.step === 1 ? depositSourceStep() : ""}
+      ${flow.step === 2 ? depositDestinationStep() : ""}
+      ${flow.step === 3 ? depositAmountStep() : ""}
+      ${flow.step === 4 ? depositReviewStep() : ""}
+    </section>
+  `;
+}
+
+function depositSourceStep() {
+  return `
+    <h3 class="flow-kicker">MY ACCOUNTS</h3>
+    <button class="account-option dark" onclick="chooseDepositSource('wallet')">
+      <span class="account-left"><span>⚡</span><span><b>My Wallet</b><small>+639173728852</small></span></span>
+      <strong>${money(state.wallet)}</strong>
+    </button>
+    <button class="account-option mint" onclick="chooseDepositSource('savings')">
+      <span class="account-left"><span>🐷</span><span><b>My Savings</b><small>•••• •••• 2872</small></span></span>
+      <strong>${money(state.savings)}</strong>
+    </button>
+    <h3 class="flow-kicker">OTHER SOURCES</h3>
+    <button class="account-option light" onclick="chooseDepositSource('bank')">
+      <span class="account-left"><span>${icon("bank")}</span><b>Other banks</b></span>
+      <span class="muted">›</span>
+    </button>
+  `;
+}
+
+function depositDestinationStep() {
+  return `
+    <button class="account-option mint" onclick="chooseDepositDestination('savings')">
+      <span class="account-left"><span>🐷</span><span><b>My Savings</b><small>•••• •••• 2872</small></span></span>
+      <strong>${money(state.savings)}</strong>
+    </button>
+    <button class="account-option pink" onclick="chooseDepositDestination('goal')">
+      <span class="account-left"><span>${state.goal.emoji}</span><span><b>${state.goal.name}</b><small>•••• •••• 6162</small></span></span>
+      <strong>${money(state.goal.balance)}</strong>
+    </button>
+  `;
+}
+
+function depositAmountStep() {
+  const balance = depositSourceBalance();
+  const disabled = !state.depositFlow.amount || state.depositFlow.amount <= 0;
+  const helper = state.depositFlow.source === "bank"
+    ? "Enter the amount you want to deposit from another bank"
+    : `You have ${money(balance)} in your ${depositSourceLabel().toLowerCase()}`;
+  return `
+    <label class="amount-field">
+      <span>Deposit amount</span>
+      <input id="depositAmount" inputmode="decimal" type="number" min="1" step="0.01" placeholder="Enter deposit amount" value="${state.depositFlow.amount || ""}" oninput="setDepositAmount(this.value)" autofocus />
+    </label>
+    <p class="amount-help">${helper}</p>
+    <button class="flow-continue ${disabled ? "disabled" : ""}" onclick="continueDepositAmount()" ${disabled ? "disabled" : ""}>Continue</button>
+  `;
+}
+
+function depositReviewStep() {
+  const source = depositSourceLabel();
+  const destination = depositDestinationLabel();
+  const amount = Number(state.depositFlow.amount || 0);
+  return `
+    <section class="review-card">
+      <div class="review-amount">${peso.format(amount)}</div>
+      <div class="review-row"><span>From</span><b>${source}</b></div>
+      <div class="review-row"><span>To</span><b>${destination}</b></div>
+      <div class="review-row"><span>Fee</span><b>Free</b></div>
+    </section>
+    <button class="flow-continue" onclick="finishDepositFlow()">Deposit</button>
+  `;
+}
+
+function chooseDepositSource(source) {
+  updateDepositFlow({ source, step: 2 });
+}
+
+function chooseDepositDestination(destination) {
+  if (state.depositFlow.source === destination) {
+    toast("Choose a different destination");
+    return;
+  }
+  updateDepositFlow({ destination, step: 3 });
+  setTimeout(() => document.querySelector("#depositAmount")?.focus(), 0);
+}
+
+function setDepositAmount(value) {
+  state.depositFlow.amount = Number(value || 0);
+  saveState();
+  const button = document.querySelector(".flow-continue");
+  if (button) {
+    const disabled = !state.depositFlow.amount || state.depositFlow.amount <= 0;
+    button.disabled = disabled;
+    button.classList.toggle("disabled", disabled);
+  }
+}
+
+function continueDepositAmount() {
+  const amount = Number(state.depositFlow.amount || 0);
+  const balance = depositSourceBalance();
+  if (!amount || amount <= 0) return toast("Enter a valid amount");
+  if (state.depositFlow.source !== "bank" && amount > balance) return toast(`Insufficient ${depositSourceLabel().toLowerCase()} balance`);
+  updateDepositFlow({ step: 4 });
+}
+
+function finishDepositFlow() {
+  const amount = Number(state.depositFlow.amount || 0);
+  const { source, destination } = state.depositFlow;
+  if (source !== "bank") {
+    if (amount > depositSourceBalance()) return toast(`Insufficient ${depositSourceLabel().toLowerCase()} balance`);
+    if (source === "wallet") state.wallet -= amount;
+    if (source === "savings") state.savings -= amount;
+  }
+  if (destination === "savings") state.savings += amount;
+  if (destination === "goal") state.goal.balance += amount;
+  addTransaction("Deposited to", depositDestinationLabel(), `+ ${peso.format(amount)}`);
+  state.depositFlow = null;
+  state.view = destination === "goal" ? "goal" : "mySavings";
+  saveState();
+  render();
+  toast(`${peso.format(amount)} deposited`);
+}
+
+function depositBack() {
+  if (!state.depositFlow || state.depositFlow.step === 1) {
+    resetDepositFlow();
+    return;
+  }
+  updateDepositFlow({ step: state.depositFlow.step - 1 });
+}
+
+function depositSourceBalance() {
+  if (!state.depositFlow) return 0;
+  if (state.depositFlow.source === "wallet") return state.wallet;
+  if (state.depositFlow.source === "savings") return state.savings;
+  return 0;
+}
+
+function depositSourceLabel() {
+  const source = state.depositFlow?.source;
+  if (source === "wallet") return "My Wallet";
+  if (source === "savings") return "My Savings";
+  return "Other banks";
+}
+
+function depositDestinationLabel() {
+  return state.depositFlow?.destination === "goal" ? state.goal.name : "My Savings";
 }
 
 function transactionsPanel() {
@@ -499,6 +685,10 @@ function render() {
   }
   if (state.view === "goal") {
     app.innerHTML = renderGoalDetail();
+    return;
+  }
+  if (state.view === "depositFlow") {
+    app.innerHTML = renderDepositFlow();
     return;
   }
   if (state.tab === "wallet") content = renderWallet();
