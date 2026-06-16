@@ -605,6 +605,10 @@ button {
   padding: 56px 0 28px;
 }
 
+.signup-brand {
+  padding-top: 42px;
+}
+
 .login-logo {
   width: 58px;
   height: 58px;
@@ -660,7 +664,8 @@ button {
 }
 
 .login-primary,
-.google-btn {
+.google-btn,
+.create-account-btn {
   width: 100%;
   min-height: 58px;
   border-radius: 18px;
@@ -700,6 +705,19 @@ button {
   color: var(--ink);
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
+}
+
+.create-account-btn {
+  margin-top: 14px;
+  background: #111;
+  color: #fff;
+}
+
+.create-account-btn.quiet {
+  margin-top: 18px;
+  background: transparent;
+  color: var(--green);
+  min-height: 48px;
 }
 
 .google-mark {

@@ -61,6 +61,7 @@ const defaultState = {
 let session = null;
 let state = cloneDefaultState();
 let booting = true;
+let authMode = "signin";
 const app = document.querySelector("#app");
 const modalRoot = document.querySelector("#modalRoot");
 
@@ -181,28 +182,49 @@ async function signInWithEmail(event) {
 
   if (!email || !password) return toast("Enter your email and password");
 
-  let { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    const signUp = await supabaseClient.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: displayNameFromEmail(email) } },
-    });
-    data = signUp.data;
-    error = signUp.error;
-  }
-
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
   if (error) return toast(error.message);
-  if (!data.session) {
-    return toast("Check your email to confirm this account, then sign in");
-  }
+  if (!data.session) return toast("Check your email to confirm this account, then sign in");
 
   session = data.session;
   state = await loadWalletState(data.session.user);
   closeModal();
   render();
   toast(`Signed in as ${accountName(data.session.user)}`);
+}
+
+async function createAccountWithEmail(event) {
+  event.preventDefault();
+  if (!supabaseClient) return toast("Supabase failed to load");
+
+  const form = event.currentTarget;
+  const email = accountKey(form.email.value);
+  const password = form.password.value;
+  const confirmPassword = form.confirmPassword.value;
+
+  if (!email || !password || !confirmPassword) return toast("Complete all fields");
+  if (password.length < 6) return toast("Password must be at least 6 characters");
+  if (password !== confirmPassword) return toast("Passwords do not match");
+
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: displayNameFromEmail(email) } },
+  });
+
+  if (error) return toast(error.message);
+
+  if (!data.session) {
+    authMode = "signin";
+    render();
+    return toast("Check your email to confirm your account, then sign in");
+  }
+
+  session = data.session;
+  state = await loadWalletState(data.session.user);
+  closeModal();
+  render();
+  toast(`Account created for ${accountName(data.session.user)}`);
 }
 
 async function signInWithGoogle() {
@@ -225,7 +247,14 @@ async function logout() {
   toast("Logged out");
 }
 
+function setAuthMode(mode) {
+  authMode = mode;
+  render();
+}
+
 function renderLogin() {
+  if (authMode === "signup") return renderSignup();
+
   return `
     <section class="login-page">
       <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
@@ -248,7 +277,34 @@ function renderLogin() {
         <span class="google-mark">G</span>
         Continue with Google
       </button>
+      <button class="create-account-btn" onclick="setAuthMode('signup')" type="button">Create an account</button>
       <p class="login-note">New Supabase accounts create a wallet with ${peso.format(defaultState.wallet)}.</p>
+    </section>
+  `;
+}
+
+function renderSignup() {
+  return `
+    <section class="login-page">
+      <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
+      <div class="login-brand signup-brand">
+        <div class="login-logo">m</div>
+        <h1>Create an account</h1>
+        <p>Your wallet starts with ${peso.format(defaultState.wallet)} after sign-up.</p>
+      </div>
+      <form class="login-form" onsubmit="createAccountWithEmail(event)">
+        <label>Email
+          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="new-password" placeholder="Password" minlength="6" required />
+        </label>
+        <label>Confirm password
+          <input name="confirmPassword" type="password" autocomplete="new-password" placeholder="Confirm password" minlength="6" required />
+        </label>
+        <button class="login-primary" type="submit">Create account</button>
+      </form>
+      <button class="create-account-btn quiet" onclick="setAuthMode('signin')" type="button">Already have an account? Sign in</button>
     </section>
   `;
 }
