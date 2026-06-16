@@ -595,6 +595,129 @@ button {
   padding: 18px;
 }
 
+.login-page {
+  min-height: 100vh;
+  padding: 14px 20px 44px;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f7f7 58%, #edf8f2 100%);
+}
+
+.login-brand {
+  padding: 56px 0 28px;
+}
+
+.login-logo {
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: #000;
+  color: var(--green);
+  font-size: 34px;
+  font-weight: 950;
+  margin-bottom: 24px;
+}
+
+.login-brand h1 {
+  margin: 0 0 10px;
+  font-size: 38px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.login-brand p,
+.login-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.login-form {
+  display: grid;
+  gap: 14px;
+}
+
+.login-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.login-form input {
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 800;
+  box-shadow: 0 8px 20px rgba(10, 10, 10, 0.04);
+}
+
+.login-primary,
+.google-btn {
+  width: 100%;
+  min-height: 58px;
+  border-radius: 18px;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.login-primary {
+  margin-top: 8px;
+  background: var(--green);
+  color: #fff;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 24px 0;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.google-btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.google-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #4285f4;
+  background: #f5f8ff;
+  font-weight: 950;
+}
+
+.login-note {
+  margin-top: 20px;
+  text-align: center;
+}
+
 .profile-page {
   margin: -14px -20px 0;
   min-height: 100vh;

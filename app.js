@@ -4,13 +4,18 @@ const peso = new Intl.NumberFormat("en-PH", {
   minimumFractionDigits: 2,
 });
 
+const SUPABASE_URL = "https://rizxgcgooukdckpfhkkr.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_7kUampSawoDOCylHDsHyHQ_43TopGft";
+const WALLET_TABLE = "wallet_states";
+const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
 const defaultState = {
   tab: "wallet",
   view: "home",
-  wallet: 1500.00, // starting wallet balance
-  savings: 164.58,
+  wallet: 1000.00,
+  savings: 0,
   hidden: false,
-  timeDeposit: 12500,
+  timeDeposit: 0,
   goal: {
     name: "japan",
     emoji: "👠",
@@ -22,8 +27,7 @@ const defaultState = {
   },
   depositFlow: null,
   transactions: [
-    { title: "Created account", detail: "japan", age: "10 minutes ago", amount: "" },
-    { title: "Transferred to", detail: "Maya Black E... (9278)", age: "22 hours ago", amount: "- ₱12,500.00" },
+    { title: "Account opened", detail: "Welcome wallet funds", age: "Just now", amount: "+ ₱1,000.00" },
   ],
   
   // Credit Journey State Properties
@@ -54,20 +58,232 @@ const defaultState = {
 
 };
 
-let state = loadState();
+let session = null;
+let state = cloneDefaultState();
+let booting = true;
 const app = document.querySelector("#app");
 const modalRoot = document.querySelector("#modalRoot");
 
-function loadState() {
-  try {
-    return { ...defaultState, ...JSON.parse(localStorage.getItem("fakeMayaState")) };
-  } catch {
-    return structuredClone(defaultState);
+function cloneDefaultState() {
+  return typeof structuredClone === "function"
+    ? structuredClone(defaultState)
+    : JSON.parse(JSON.stringify(defaultState));
+}
+
+function accountKey(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+function displayNameFromEmail(email) {
+  const local = String(email || "Maya User").split("@")[0].replace(/[._-]+/g, " ");
+  return local
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(" ") || "Maya User";
+}
+
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function accountName(user = session?.user) {
+  const metadata = user?.user_metadata || {};
+  return metadata.full_name || metadata.name || displayNameFromEmail(user?.email);
+}
+
+function currentAccount() {
+  const user = session?.user;
+  if (!user) return null;
+  const provider = user.app_metadata?.provider === "google" ? "google" : "email";
+  return {
+    email: user.email || "",
+    name: accountName(user),
+    phone: user.phone || "+63 917 000 0000",
+    provider,
+  };
+}
+
+function walletRowPayload(user = session?.user) {
+  return {
+    user_id: user.id,
+    email: user.email,
+    full_name: accountName(user),
+    phone: user.phone || "+63 917 000 0000",
+    wallet: Number(state.wallet || 0),
+    savings: Number(state.savings || 0),
+    time_deposit: Number(state.timeDeposit || 0),
+    goal_balance: Number(state.goal?.balance || 0),
+    app_state: state,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function loadWalletState(user) {
+  if (!supabaseClient || !user) return cloneDefaultState();
+
+  const { data, error } = await supabaseClient
+    .from(WALLET_TABLE)
+    .select("app_state,wallet,savings,time_deposit,goal_balance")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    toast(`Supabase table needed: ${WALLET_TABLE}`);
+    return cloneDefaultState();
+  }
+
+  if (data?.app_state) {
+    return {
+      ...cloneDefaultState(),
+      ...data.app_state,
+      wallet: Number(data.wallet ?? data.app_state.wallet ?? 1000),
+      savings: Number(data.savings ?? data.app_state.savings ?? 0),
+      timeDeposit: Number(data.time_deposit ?? data.app_state.timeDeposit ?? 0),
+      goal: {
+        ...cloneDefaultState().goal,
+        ...(data.app_state.goal || {}),
+        balance: Number(data.goal_balance ?? data.app_state.goal?.balance ?? 0),
+      },
+    };
+  }
+
+  const freshState = cloneDefaultState();
+  await persistWalletState(user, freshState);
+  return freshState;
+}
+
+async function persistWalletState(user = session?.user, snapshot = state) {
+  if (!supabaseClient || !user) return;
+  const previousState = state;
+  state = snapshot;
+  const { error } = await supabaseClient
+    .from(WALLET_TABLE)
+    .upsert(walletRowPayload(user), { onConflict: "user_id" });
+  state = previousState;
+  if (error) {
+    toast(`Could not save to Supabase: ${error.message}`);
   }
 }
 
+async function signInWithEmail(event) {
+  event.preventDefault();
+  if (!supabaseClient) return toast("Supabase failed to load");
+
+  const form = event.currentTarget;
+  const email = accountKey(form.email.value);
+  const password = form.password.value;
+
+  if (!email || !password) return toast("Enter your email and password");
+
+  let { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    const signUp = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: displayNameFromEmail(email) } },
+    });
+    data = signUp.data;
+    error = signUp.error;
+  }
+
+  if (error) return toast(error.message);
+  if (!data.session) {
+    return toast("Check your email to confirm this account, then sign in");
+  }
+
+  session = data.session;
+  state = await loadWalletState(data.session.user);
+  closeModal();
+  render();
+  toast(`Signed in as ${accountName(data.session.user)}`);
+}
+
+async function signInWithGoogle() {
+  if (!supabaseClient) return toast("Supabase failed to load");
+
+  const { error } = await supabaseClient.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: window.location.href.split("#")[0] },
+  });
+  if (error) toast(error.message);
+}
+
+async function logout() {
+  closeModal();
+  await persistWalletState();
+  await supabaseClient?.auth.signOut();
+  session = null;
+  state = cloneDefaultState();
+  render();
+  toast("Logged out");
+}
+
+function renderLogin() {
+  return `
+    <section class="login-page">
+      <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
+      <div class="login-brand">
+        <div class="login-logo">m</div>
+        <h1>Sign in to FakeMaya</h1>
+        <p>Use an account to keep wallet, savings, credit, loans, and transactions separate.</p>
+      </div>
+      <form class="login-form" onsubmit="signInWithEmail(event)">
+        <label>Email
+          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" placeholder="Password" required />
+        </label>
+        <button class="login-primary" type="submit">Sign in</button>
+      </form>
+      <div class="login-divider"><span>or</span></div>
+      <button class="google-btn" onclick="signInWithGoogle()" type="button">
+        <span class="google-mark">G</span>
+        Continue with Google
+      </button>
+      <p class="login-note">New Supabase accounts create a wallet with ${peso.format(defaultState.wallet)}.</p>
+    </section>
+  `;
+}
+
 function saveState() {
-  localStorage.setItem("fakeMayaState", JSON.stringify(state));
+  persistWalletState();
+}
+
+async function initApp() {
+  if (!supabaseClient) {
+    booting = false;
+    render();
+    toast("Supabase client is unavailable");
+    return;
+  }
+
+  const { data } = await supabaseClient.auth.getSession();
+  session = data.session;
+  if (session?.user) {
+    state = await loadWalletState(session.user);
+  }
+
+  supabaseClient.auth.onAuthStateChange(async (event, nextSession) => {
+    session = nextSession;
+    if (nextSession?.user) {
+      state = await loadWalletState(nextSession.user);
+    } else {
+      state = cloneDefaultState();
+    }
+    booting = false;
+    render();
+  });
+
+  booting = false;
+  render();
 }
 
 function money(value) {
@@ -351,6 +567,7 @@ function renderCreditPrivacy() {
 
 function renderCreditForm() {
   const form = state.creditForm || {};
+  const account = currentAccount();
   
   const isBillingSet = form.billingDay !== null && form.billingDay !== undefined;
   const isPersonalValid = form.gender && form.maritalStatus && String(form.altMobile).trim().length > 0;
@@ -388,7 +605,7 @@ function renderCreditForm() {
 
           <div class="form-group static-field">
             <label>Verified email address</label>
-            <input type="text" value="juan.delacruz@gmail.com" disabled class="disabled-email-input" />
+            <input type="text" value="${escapeHTML(account?.email || "")}" disabled class="disabled-email-input" />
           </div>
 
           <div class="form-section-title">PERSONAL DETAILS</div>
@@ -1099,6 +1316,8 @@ function renderCards() {
 }
 
 function renderProfile() {
+  const account = currentAccount();
+  const provider = account?.provider === "google" ? "Google account" : "Email account";
   return `
     <section class="profile-page">
       <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
@@ -1109,20 +1328,24 @@ function renderProfile() {
       </div>
       <section class="profile-hero">
         <div class="profile-avatar">${icon("user")}</div>
-        <h1>Juan Dela Cruz</h1>
-        <p class="muted">Static account details</p>
+        <h1>${escapeHTML(account?.name || "Maya User")}</h1>
+        <p class="muted">${provider}</p>
       </section>
       <section class="profile-card">
         <div class="profile-row">
           <span>Name</span>
-          <strong>Juan Dela Cruz</strong>
+          <strong>${escapeHTML(account?.name || "Maya User")}</strong>
+        </div>
+        <div class="profile-row">
+          <span>Email</span>
+          <strong>${escapeHTML(account?.email || "")}</strong>
         </div>
         <div class="profile-row">
           <span>Phone number</span>
-          <strong>+63 917 372 8852</strong>
+          <strong>${escapeHTML(account?.phone || "+63 917 000 0000")}</strong>
         </div>
       </section>
-      <button class="logout-btn" onclick="toast('Logged out')">Log out</button>
+      <button class="logout-btn" onclick="logout()">Log out</button>
     </section>
   `;
 }
@@ -1502,6 +1725,25 @@ function toast(message) {
 }
 
 function render() {
+  if (booting) {
+    app.innerHTML = `
+      <section class="login-page">
+        <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
+        <div class="login-brand">
+          <div class="login-logo">m</div>
+          <h1>Loading FakeMaya</h1>
+          <p>Connecting to Supabase...</p>
+        </div>
+      </section>
+    `;
+    return;
+  }
+
+  if (!session?.user) {
+    app.innerHTML = renderLogin();
+    return;
+  }
+
   let content = "";
   if (state.view === "profile") {
     app.innerHTML = renderProfile();
@@ -1528,4 +1770,4 @@ function render() {
 }
 
 render();
-
+initApp();
