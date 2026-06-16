@@ -121,12 +121,6 @@ function shell(content) {
       <span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span>
     </div>
     ${content}
-    <nav class="bottom-nav" aria-label="Primary app actions">
-      <button class="bottom-btn active" aria-label="Home">${icon("home")}</button>
-      <button class="bottom-btn" aria-label="Scan">${icon("scan")}</button>
-      <button class="bottom-btn" aria-label="Services">${icon("grid")}</button>
-      <button class="bottom-btn" aria-label="Help">${icon("help")}</button>
-    </nav>
   `;
 }
 
