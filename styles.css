@@ -1652,6 +1652,210 @@ button {
   gap: 12px;
 }
 
+
+/* LOAN STUFF -ninarosee */
+
+
+.loan-slider-container {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  padding: 16px;
+  border-radius: 16px;
+  margin-bottom: 12px;
+}
+
+.slider-labels-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.slider-labels-row label {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+  margin: 0;
+}
+
+.slider-labels-row strong {
+  font-size: 22px;
+  font-weight: 900;
+  color: #000;
+}
+
+.maya-custom-slider {
+  width: 100%;
+  height: 6px;
+  background: var(--line);
+  border-radius: 999px;
+  appearance: none;
+  outline: none;
+  margin: 10px 0;
+}
+
+.maya-custom-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--green);
+  cursor: pointer;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+.slider-bounds {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* Calculation Results Matrix Panel */
+.calculator-estimation-matrix {
+  background: #f0f7ff;
+  border: 1px dashed #b3d7ff;
+  border-radius: 16px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.matrix-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: 700;
+  color: #334466;
+  margin-bottom: 6px;
+}
+
+.matrix-row:last-child {
+  margin-bottom: 0;
+}
+
+.matrix-row strong {
+  font-size: 16px;
+  color: #0052cc;
+  font-weight: 900;
+}
+
+.matrix-row.sub-row {
+  font-size: 12px;
+  font-weight: 500;
+  color: #667799;
+}
+
+/* Active Disbursed Loan Dashboard Layouts */
+.loan-active-dashboard-card {
+  padding: 24px 20px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #111111, #1c1c1e);
+  color: #ffffff;
+  margin-bottom: 24px;
+}
+
+.loan-balance-display {
+  font-size: 38px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -1px;
+}
+
+.loan-details-grid-box {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 20px 0;
+  padding-top: 16px;
+  border-top: 1px solid #333335;
+}
+
+.loan-detail-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.loan-detail-item span {
+  font-size: 11px;
+  color: #808080;
+  font-weight: 700;
+}
+
+.loan-detail-item strong {
+  font-size: 14px;
+  color: #ffffff;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.loan-repay-btn {
+  font-family: inherit;
+  width: 100%;
+  min-height: 48px;
+  background: var(--green);
+  color: #ffffff;
+  border-radius: 14px;
+  font-weight: 900;
+  font-size: 15px;
+}
+
+/* Post-Disbursement Channel Lists linking to Wallet and Savings Modules */
+.use-loan-channels-list {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.channel-row-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.channel-row-item:last-child {
+  border-bottom: none;
+}
+
+.channel-row-item:hover {
+  background-color: #f8fafc;
+}
+
+.channel-icon-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 18px;
+  margin-right: 14px;
+}
+
+.channel-text-block {
+  flex: 1;
+}
+
+.channel-text-block h3 {
+  font-size: 14px;
+  font-weight: 800;
+  margin: 0 0 2px 0;
+  color: var(--ink);
+}
+
+.channel-text-block p {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.3;
+}
+
 @media (max-width: 370px) {
   .app {
     padding-left: 14px;
@@ -1675,4 +1879,3 @@ button {
     gap: 5px;
   }
 }
-

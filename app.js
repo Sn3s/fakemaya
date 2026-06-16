@@ -39,7 +39,19 @@ const defaultState = {
     motherMiddle: "",
     motherLast: "",
     noMiddleName: false
-  }
+  },
+
+  loanView: "home", // home, promo, privacy, calculator, info, active
+  loanSetup: {
+    amount: 50000,
+    tenure: 12,
+    purpose: "",
+    monthlyIncome: "",
+    employmentType: ""
+  },
+  activeLoan: null // Stores running details once application completes
+  // ───────────────────────────────────────────────────────────────────
+
 };
 
 let state = loadState();
@@ -159,6 +171,14 @@ function balanceCard({ amount, label, actions, extra = "" }) {
 }
 
 function renderWallet() {
+  // Calculate if any loan capital is actively sitting in the wallet
+  let loanCapitalInWallet = 0;
+  if (state.activeLoan) {
+    // Show the remaining portion or the initial principal amount disbursed
+    loanCapitalInWallet = state.activeLoan.principal - state.activeLoan.amountPaid;
+    if (loanCapitalInWallet < 0) loanCapitalInWallet = 0;
+  }
+
   return `
     ${topChrome()}
     ${balanceCard({
@@ -170,6 +190,16 @@ function renderWallet() {
         <button class="pill-btn" onclick="openMoneySheet('send')"><span>${icon("out")}</span> Send</button>
       `,
     })}
+    
+    ${state.activeLoan ? `
+      <section class="credit-summary-widget" onclick="go('loans')" style="margin-top: 12px; margin-bottom: 0; background: #fafafa; border-left: 4px solid #0052cc;">
+        <div class="widget-row">
+          <span style="color: var(--text); font-weight: 700;">💼 From Maya Loan (Capitalized):</span>
+          <strong style="color: #0052cc;">${money(loanCapitalInWallet)}</strong>
+        </div>
+      </section>
+    ` : ""}
+
     ${state.creditView === "approved" ? `
       <section class="credit-summary-widget" onclick="go('credit')">
         <div class="widget-row">
@@ -178,6 +208,7 @@ function renderWallet() {
         </div>
       </section>
     ` : ""}
+    
     ${transactionsPanel()}
   `;
 }
@@ -606,23 +637,454 @@ function executeCreditTransfer() {
    REST OF THE BASIC APPLICATION FRAMEWORK
    ========================================================================== */
 function renderLoans() {
+  if (!state.loanView) state.loanView = "home";
+
+  if (state.loanView === "home") {
+    if (state.activeLoan) return renderActiveLoanDashboard();
+    return `
+      ${topChrome()}
+      <section class="loan-card">
+        <h1>Borrow up to<br>₱250,000 instantly</h1>
+        <p class="muted">Fund your next big life move and pay in monthly installments with <b style="color:var(--ink)">Maya Personal Loan</b></p>
+        <button class="apply-btn" onclick="setLoanView('promo')">Apply now</button>
+        <div class="center-copy">Loan approval is based on your eligibility</div>
+      </section>
+      <div class="placeholder-banner"></div>
+      <h2 class="section-title">More actions</h2>
+      <section class="list-card">
+        ${["Account summary", "View closed loans", "Learn more about loans"].map((item) => `
+          <button class="list-row" onclick="toast('${item}')"><span class="left-stack"><span>♙</span><b>${item}</b></span><span class="muted">›</span></button>
+        `).join("")}
+      </section>
+      ${footerCopy("Maya Loan is operated by")}
+    `;
+  }
+
+  if (state.loanView === "promo") return renderLoanPromo();
+  if (state.loanView === "privacy") return renderLoanPrivacy();
+  if (state.loanView === "calculator") return renderLoanCalculatorStep();
+  if (state.loanView === "info") return renderLoanInformationStep();
+}
+
+function setLoanView(view) {
+  state.loanView = view;
+  saveState();
+  render();
+}
+
+function renderLoanPromo() {
+  return `
+    <section class="credit-flow-page white-theme">
+      <div class="flow-header-nav">
+        <button class="back-btn-dark" onclick="setLoanView('home')">‹</button>
+      </div>
+      <div class="scrollable-flow-body">
+        <div class="promo-header-group">
+          <h1 class="promo-main-title" style="color:#000000;">Fund your big life moves instantly!</h1>
+          <p class="promo-subtitle" style="color:#808080;">Get a loan of up to ₱400,000</p>
+        </div>
+        <div class="puzzle-grid">
+          <div class="puzzle-box box-1" style="background:#f4f6f9; color:#000;">
+            <h3 style="color:#000;">Low monthly add-on rates</h3>
+            <p style="color:#555;">Enjoy an add-on rate for as low as 0.77% payable in up to 48 months</p>
+          </div>
+          <div class="puzzle-box box-2" style="background:#f4f6f9; color:#000;">
+            <h3 style="color:#000;">Get your loan in an instant</h3>
+          </div>
+          <div class="puzzle-box box-3" style="background:#f4f6f9; color:#000;">
+            <h3 style="color:#000;">Flexible monthly payments</h3>
+          </div>
+          <div class="puzzle-box box-4" style="background:#f4f6f9; color:#000;">
+            <h3 style="color:#000;">Easy loan management</h3>
+            <p style="color:#555;">Manage your loan repayments within the app</p>
+          </div>
+        </div>
+        <div class="promo-footer-notice">
+          For a secure and hassle-free application, your information will be shared with Maya Bank, Inc.
+        </div>
+      </div>
+      <div class="fixed-bottom-action-container">
+        <button class="continue-blue-btn" style="background:#000000;" onclick="setLoanView('privacy')">Apply Now</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderLoanPrivacy() {
+  return `
+    <section class="credit-flow-page white-theme">
+      <div class="flow-header-nav">
+        <button class="back-btn-dark" onclick="setLoanView('promo')">‹</button>
+        <span class="nav-page-title">Privacy Notice</span>
+      </div>
+      <div class="scrollable-flow-body text-body-padding">
+        <h3>Consent for Personal Loan Evaluation</h3>
+        <p>By proceeding, you explicitly authorize Maya Bank, Inc. to review your historical ecosystem profiles, including digital wallet spending trends, payment histories, and micro-savings patterns, to process personal consumer underwriting capabilities under central banking framework guidelines.</p>
+        <p>All structured documentation calculations are encrypted and processed by high-performance algorithmic risk modules, bypassing manual data exposure vectors completely.</p>
+      </div>
+      <div class="fixed-bottom-action-container">
+        <button class="continue-blue-btn" onclick="setLoanView('calculator')">Continue</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderLoanCalculatorStep() {
+  const setup = state.loanSetup;
+  
+  // Maya Personal Loan Calculation formula logic
+  const addOnRate = 0.0077; // 0.77% as per requirements
+  const principal = setup.amount;
+  const months = setup.tenure;
+  const totalInterest = principal * addOnRate * months;
+  const monthlyAmortization = (principal + totalInterest) / months;
+
+  return `
+    <section class="credit-flow-page white-theme">
+      <div class="form-top-bar">
+        <button class="back-btn-dark" onclick="setLoanView('privacy')">‹</button>
+        <div class="form-progress-bar-wrapper">
+          <div class="form-progress-bar-fill" style="width: 50%;"></div>
+        </div>
+        <span class="form-step-indicator">1/2</span>
+      </div>
+
+      <div class="scrollable-flow-body input-form-layout">
+        <div class="form-intro-block">
+          <h1>Set Up your Loan Requirements</h1>
+          <p class="muted">Configure your ideal personal installment properties below:</p>
+        </div>
+
+        <div class="credit-input-form">
+          <div class="form-section-title">LOAN AMOUNT CALCULATOR</div>
+          
+          <div class="loan-slider-container">
+            <div class="slider-labels-row">
+              <label>How much do you need?</label>
+              <strong>₱${Number(setup.amount).toLocaleString()}</strong>
+            </div>
+            <input type="range" min="15000" max="25000" step="5000" value="${setup.amount}" oninput="handleLoanRangeSlider(this.value)" class="maya-custom-slider" />
+            <div class="slider-bounds"><span>₱15,000</span><span>₱250,000 max offer</span></div>
+          </div>
+
+          <div class="form-group" style="margin-top:20px;">
+            <label>Repayment Period</label>
+            <select onchange="handleLoanSelectField('tenure', this.value)">
+              <option value="6" ${setup.tenure == 6 ? 'selected' : ''}>6 Months</option>
+              <option value="12" ${setup.tenure == 12 ? 'selected' : ''}>12 Months</option>
+              <option value="18" ${setup.tenure == 18 ? 'selected' : ''}>18 Months</option>
+              <option value="24" ${setup.tenure == 24 ? 'selected' : ''}>24 Months</option>
+            </select>
+          </div>
+
+          <!-- Dynamic Live Calculator Amortization Box Matrix -->
+          <div class="calculator-estimation-matrix">
+            <div class="matrix-row"><span>Monthly Amortization:</span><strong>₱${monthlyAmortization.toFixed(2)} / mo</strong></div>
+            <div class="matrix-row sub-row"><span>Interest Factor (0.77% add-on):</span><span>₱${(principal * addOnRate).toFixed(2)} / mo</span></div>
+            <div class="matrix-row sub-row"><span>Total Repayment Over Time:</span><span>₱${(principal + totalInterest).toFixed(2)}</span></div>
+          </div>
+
+          <div class="form-group" style="margin-top:20px;">
+            <label>Purpose of Loan</label>
+            <select id="loanPurposeSelect" onchange="handleLoanSelectField('purpose', this.value)">
+              <option value="" ${!setup.purpose ? 'selected' : ''} disabled>Select Loan Purpose</option>
+              <option value="Business Expansion" ${setup.purpose === 'Business Expansion' ? 'selected' : ''}>Business Expansion / Capital</option>
+              <option value="Home Renovation" ${setup.purpose === 'Home Renovation' ? 'selected' : ''}>Home Renovation & Repair</option>
+              <option value="Gadget / Appliance Upgrade" ${setup.purpose === 'Gadget / Appliance Upgrade' ? 'selected' : ''}>Gadget / Appliance Purchase</option>
+              <option value="Education / Tuition" ${setup.purpose === 'Education / Tuition' ? 'selected' : ''}>Education / Tuition Fees</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="fixed-bottom-action-container">
+        <button class="submit-credit-form-btn ${setup.purpose ? 'complete-green' : ''}" ${!setup.purpose ? 'disabled' : ''} onclick="setLoanView('info')">
+          Continue
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+function renderLoanInformationStep() {
+  const setup = state.loanSetup;
+  const isValid = setup.employmentType && setup.monthlyIncome.trim().length > 0;
+
+  return `
+    <section class="credit-flow-page white-theme">
+      <div class="form-top-bar">
+        <button class="back-btn-dark" onclick="setLoanView('calculator')">‹</button>
+        <div class="form-progress-bar-wrapper">
+          <div class="form-progress-bar-fill" style="width: 100%;"></div>
+        </div>
+        <span class="form-step-indicator">2/2</span>
+      </div>
+
+      <div class="scrollable-flow-body input-form-layout">
+        <div class="form-intro-block">
+          <h1>Employment Info</h1>
+          <p class="muted">Maya Bank requires baseline verification metrics for consumer evaluation checks:</p>
+        </div>
+
+        <div class="credit-input-form">
+          <div class="form-section-title">FINANCIAL PROFILE</div>
+
+          <div class="form-group">
+            <label>Employment Status</label>
+            <select onchange="handleLoanSelectField('employmentType', this.value)">
+              <option value="" ${!setup.employmentType ? 'selected' : ''} disabled>Select Status</option>
+              <option value="Privately Employed" ${setup.employmentType === 'Privately Employed' ? 'selected' : ''}>Privately Employed</option>
+              <option value="Self-Employed" ${setup.employmentType === 'Self-Employed' ? 'selected' : ''}>Self-Employed / Freelancer</option>
+              <option value="Government Employee" ${setup.employmentType === 'Government Employee' ? 'selected' : ''}>Government Employee</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Gross Monthly Income (PHP)</label>
+            <input type="number" inputmode="numeric" data-loanfield="monthlyIncome" placeholder="e.g. 35000" value="${setup.monthlyIncome || ''}" oninput="handleLoanInputEngine(event)" />
+          </div>
+        </div>
+      </div>
+
+      <div class="fixed-bottom-action-container">
+        <button id="loanSubmitBtn" class="submit-credit-form-btn ${isValid ? 'complete-green' : ''}" ${!isValid ? 'disabled' : ''} onclick="executeLoanDisbursementRoutine()">
+          Disburse Loan Instantly
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+/* Operational State Engine updates for loans without breaking current execution focus */
+function handleLoanRangeSlider(val) {
+  state.loanSetup.amount = parseInt(val);
+  saveState();
+  
+  // Reactive updates for calculation figures
+  const addOnRate = 0.0077;
+  const principal = state.loanSetup.amount;
+  const months = state.loanSetup.tenure;
+  const totalInterest = principal * addOnRate * months;
+  const monthlyAmortization = (principal + totalInterest) / months;
+  
+  const amtDisplay = document.querySelector(".slider-labels-row strong");
+  if(amtDisplay) amtDisplay.textContent = `\u20B1${principal.toLocaleString()}`;
+  
+  const matrixBox = document.querySelector(".calculator-estimation-matrix");
+  if(matrixBox) {
+    matrixBox.innerHTML = `
+      <div class="matrix-row"><span>Monthly Amortization:</span><strong>\u20B1${monthlyAmortization.toFixed(2)} / mo</strong></div>
+      <div class="matrix-row sub-row"><span>Interest Factor (0.77% add-on):</span><span>\u20B1${(principal * addOnRate).toFixed(2)} / mo</span></div>
+      <div class="matrix-row sub-row"><span>Total Repayment Over Time:</span><span>\u20B1${(principal + totalInterest).toFixed(2)}</span></div>
+    `;
+  }
+}
+
+function handleLoanSelectField(field, val) {
+  state.loanSetup[field] = val;
+  saveState();
+  render();
+}
+
+function handleLoanInputEngine(e) {
+  const field = e.target.getAttribute('data-loanfield');
+  state.loanSetup[field] = e.target.value;
+  saveState();
+  
+  const setup = state.loanSetup;
+  const isValid = setup.employmentType && setup.monthlyIncome.trim().length > 0;
+  const btn = document.querySelector("#loanSubmitBtn");
+  if(btn) {
+    if(isValid) {
+      btn.classList.add("complete-green");
+      btn.removeAttribute("disabled");
+    } else {
+      btn.classList.remove("complete-green");
+      btn.setAttribute("disabled", "true");
+    }
+  }
+}
+
+function executeLoanDisbursementRoutine() {
+  const setup = state.loanSetup;
+  const addOnRate = 0.0077;
+  const principal = Number(setup.amount);
+  const months = Number(setup.tenure);
+  const totalInterest = principal * addOnRate * months;
+  
+  // Create the operational active loan structure inside state memory
+  state.activeLoan = {
+    principal: principal,
+    tenure: months,
+    monthlyAmortization: (principal + totalInterest) / months,
+    totalRepayable: principal + totalInterest,
+    amountPaid: 0.00,
+    purpose: setup.purpose || "Personal Capital"
+  };
+  
+  // Real App Ecosystem Integration:
+  // 1. Inject the borrowed capital directly into the core wallet balance!
+  state.wallet += principal;
+  
+  // 2. Log a recognizable history item that populates the Wallet & Savings tabs
+  addTransaction("Maya Bank Loan", "Disbursed to Wallet", `+ ₱${principal.toLocaleString('en-PH', { minimumFractionDigits: 2 })}`);
+  
+  // 3. Return view to 'home' so they see their active loan status overview next time they open the tab
+  state.loanView = "home";
+  
+  saveState();
+  render();
+  
+  // Alert the user instantly
+  toast(`₱${principal.toLocaleString()} Credited to Wallet!`);
+}
+
+/* ==========================================================================
+   LOAN JOURNEY POST-DISBURSEMENT ACTIVE MANAGEMENT MODULE
+   ========================================================================== */
+function renderActiveLoanDashboard() {
+  const loan = state.activeLoan;
+  const remaining = loan.totalRepayable - loan.amountPaid;
+
   return `
     ${topChrome()}
-    <section class="loan-card">
-      <h1>Borrow up to<br>₱250,000 instantly</h1>
-      <p class="muted">Fund your next big life move and pay in monthly installments with <b>Maya Personal Loan</b></p>
-      <button class="apply-btn" onclick="toast('Loan application started')">Apply now</button>
-      <div class="center-copy">Loan approval is based on your eligibility</div>
-    </section>
-    <div class="placeholder-banner"></div>
-    <h2 class="section-title">More actions</h2>
-    <section class="list-card">
-      ${["Account summary", "View closed loans", "Learn more about loans"].map((item) => `
-        <button class="list-row" onclick="toast('${item}')"><span class="left-stack"><span>${icon("account")}</span><b>${item}</b></span><span class="muted">›</span></button>
-      `).join("")}
-    </section>
-    ${footerCopy("Maya Loan is operated by")}
+    <div class="scrollable-flow-body" style="padding: 10px 0 120px;">
+      <section class="loan-active-dashboard-card">
+        <div class="dashboard-header-line">
+          <div>
+            <div class="loan-balance-display">${money(remaining)}</div>
+            <p class="muted-label" style="color: #a0aec0;">Remaining Personal Loan Balance</p>
+          </div>
+          <span class="active-badge" style="background:#0052cc;">DISBURSED</span>
+        </div>
+        
+        <div class="loan-details-grid-box">
+          <div class="loan-detail-item"><span>Monthly Due:</span><strong>${money(loan.monthlyAmortization)}</strong></div>
+          <div class="loan-detail-item"><span>Term Length:</span><strong>${loan.tenure} Months</strong></div>
+          <div class="loan-detail-item" style="grid-column: span 2; margin-top: 8px;"><span>Loan Purpose:</span><strong>${loan.purpose}</strong></div>
+        </div>
+
+        <button class="loan-repay-btn" onclick="openLoanRepaySheet()">
+          Pay Loan Installment
+        </button>
+      </section>
+
+      <h2 class="section-title" style="margin-top:20px;">Use Loan Capital</h2>
+      <div class="use-loan-channels-list">
+        <div class="channel-row-item" onclick="go('wallet')">
+          <div class="channel-icon-avatar">⚡</div>
+          <div class="channel-text-block">
+            <h3>Withdraw via Core Wallet</h3>
+            <p>Your wallet balance has grown by ${money(loan.principal)}. Use it via Transfer vectors.</p>
+          </div>
+          <span class="muted">›</span>
+        </div>
+        <div class="channel-row-item" onclick="go('savings')">
+          <div class="channel-icon-avatar">🐷</div>
+          <div class="channel-text-block">
+            <h3>Move to High-Yield Savings</h3>
+            <p>Park unused credit capital in your goal sheets to accumulate interest multiplier rewards.</p>
+          </div>
+          <span class="muted">›</span>
+        </div>
+      </div>
+    </div>
   `;
+}
+
+function openLoanRepaySheet() {
+  const loan = state.activeLoan;
+  modalRoot.className = "modal-root active";
+  modalRoot.setAttribute("aria-hidden", "false");
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <section class="sheet" role="dialog" aria-modal="true">
+      <h2>Pay Loan Amortization</h2>
+      <p class="muted">Deduct installment payments directly from your available main digital wallet balance.</p>
+      <p class="muted" style="margin-bottom:12px;">Wallet Available: <b style="color:var(--ink)">${money(state.wallet)}</b></p>
+      
+      <label class="field">Payment Amount
+        <input id="loanRepayInput" type="number" min="1" step="0.01" value="${loan.monthlyAmortization.toFixed(2)}" autofocus style="width:100%; min-height:52px; border-radius:14px; border:1px solid #ccc; padding:0 14px;" />
+      </label>
+      
+      <div class="sheet-actions" style="display:flex; gap:12px; margin-top:20px;">
+        <button class="pill-btn ghost" onclick="closeModal()" style="flex:1;">Cancel</button>
+        <button class="pill-btn solid" onclick="executeLoanPaymentFromWallet()" style="flex:1; background:var(--green); color:#fff;">Pay Now</button>
+      </div>
+    </section>
+  `;
+}
+
+function executeLoanPaymentFromWallet() {
+  const payAmt = Number(document.querySelector("#loanRepayInput")?.value || 0);
+  const loan = state.activeLoan;
+
+  if (!payAmt || payAmt <= 0) return toast("Enter a valid payment figure");
+  if (payAmt > state.wallet) return toast("Insufficient wallet funds. Please cash-in first.");
+  
+  state.wallet -= payAmt;
+  loan.amountPaid += payAmt; // Increases the repayment allocation marker
+  
+  addTransaction("Loan Repayment", "Paid via Wallet", `- ₱${payAmt.toFixed(2)}`);
+  
+  if (loan.amountPaid >= loan.totalRepayable) {
+    state.activeLoan = null; // Clean up loan profile from state entirely when fully paid
+    toast("Success! Your Personal Loan is completely paid off.");
+  } else {
+    toast(`Payment of ₱${payAmt.toFixed(2)} processed successfully`);
+  }
+  
+  saveState();
+  closeModal();
+  render();
+}
+
+function openLoanRepaySheet() {
+  const loan = state.activeLoan;
+  modalRoot.className = "modal-root active";
+  modalRoot.setAttribute("aria-hidden", "false");
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <section class="sheet" role="dialog" aria-modal="true">
+      <h2>Pay Loan Amortization</h2>
+      <p class="muted">Deduct installment payments directly from your available main digital wallet balance.</p>
+      <p class="muted" style="margin-bottom:12px;">Wallet Available: <b style="color:var(--ink)">${money(state.wallet)}</b></p>
+      
+      <label class="field">Payment Amount
+        <input id="loanRepayInput" type="number" min="1" step="0.01" value="${loan.monthlyAmortization.toFixed(2)}" autofocus style="width:100%; min-height:52px; border-radius:14px; border:1px solid #ccc; padding:0 14px;" />
+      </label>
+      
+      <div class="sheet-actions" style="display:flex; gap:12px; margin-top:20px;">
+        <button class="pill-btn ghost" onclick="closeModal()" style="flex:1;">Cancel</button>
+        <button class="pill-btn solid" onclick="executeLoanPaymentFromWallet()" style="flex:1; background:var(--green); color:#fff;">Pay Now</button>
+      </div>
+    </section>
+  `;
+}
+
+function executeLoanPaymentFromWallet() {
+  const payAmt = Number(document.querySelector("#loanRepayInput")?.value || 0);
+  const loan = state.activeLoan;
+
+  if (!payAmt || payAmt <= 0) return toast("Enter a valid payment figure");
+  if (payAmt > state.wallet) return toast("Insufficient wallet funds. Please cash-in first.");
+  
+  state.wallet -= payAmt;
+  loan.amountPaid += payAmt;
+  
+  addTransaction("Loan Repayment", "Paid via Wallet", `- ₱${payAmt.toFixed(2)}`);
+  
+  // Auto-close loop when fully resolved
+  if (loan.amountPaid >= loan.totalRepayable) {
+    state.activeLoan = null;
+    toast("Success! Your Personal Loan is completely paid off.");
+  } else {
+    toast(`Payment of ₱${payAmt.toFixed(2)} processed successfully`);
+  }
+  
+  saveState();
+  closeModal();
+  render();
 }
 
 function renderCards() {
