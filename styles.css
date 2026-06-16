@@ -1162,6 +1162,496 @@ button {
   z-index: 80;
 }
 
+.credit-flow-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  z-index: 10;
+  padding: 14px 0 0 0; /* Padding handled inside scroll view */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.credit-flow-page.black-theme {
+  background: #000000;
+  color: #ffffff;
+}
+
+.credit-flow-page.white-theme {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+/* Explicit layout container allowing native inertial scrolling */
+.scrollable-flow-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 20px 120px; /* Space at bottom for fixed buttons */
+  -webkit-overflow-scrolling: touch;
+}
+
+.scrollable-flow-body.text-body-padding p {
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+  color: #444;
+}
+
+.scrollable-flow-body.input-form-layout {
+  padding-top: 10px;
+}
+
+/* Prevents buttons from sliding away on scroll */
+.fixed-bottom-action-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  padding: 16px 20px 30px;
+  background: linear-gradient(to top, var(--bg) 80%, transparent);
+  z-index: 12;
+}
+
+.black-theme .fixed-bottom-action-container {
+  background: linear-gradient(to top, #000 80%, transparent);
+}
+
+/* Navigation Bar inside Form Header */
+.flow-header-nav {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 20px;
+  margin-top: 10px;
+}
+
+.back-btn-light, .back-btn-dark {
+  background: transparent;
+  font-size: 38px;
+  padding: 0;
+  line-height: 1;
+}
+.back-btn-light { color: #ffffff; }
+.back-btn-dark { color: #000000; }
+
+.nav-page-title {
+  margin-left: 16px;
+  font-size: 19px;
+  font-weight: 800;
+}
+
+/* Promo Puzzle Grid Layout */
+.promo-header-group {
+  margin: 20px 0 24px;
+}
+
+.promo-main-title {
+  font-size: 26px;
+  font-weight: 900;
+  line-height: 1.25;
+  margin: 0 0 6px;
+}
+
+.promo-subtitle {
+  color: #808080;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.puzzle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.puzzle-box {
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.puzzle-box h3 {
+  font-size: 15px;
+  font-weight: 850;
+  margin: 0 0 6px 0;
+  line-height: 1.3;
+}
+
+.puzzle-box p {
+  font-size: 12px;
+  color: #808080;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.puzzle-box.box-1 { grid-column: span 2; background: #1c1c1e; }
+.puzzle-box.box-2 { grid-column: span 1; background: #1c1c1e; }
+.puzzle-box.box-3 { grid-column: span 1; background: #1c1c1e; }
+.puzzle-box.box-4 { grid-column: span 2; background: #1c1c1e; }
+
+.purple-tag {
+  color: #a17aff;
+  font-size: 10px;
+  font-weight: 900;
+  margin-bottom: 4px;
+}
+
+.promo-footer-notice {
+  font-size: 12px;
+  color: #808080;
+  text-align: center;
+  line-height: 1.4;
+  margin: 24px 0;
+}
+
+.apply-btn.solid-white {
+  background: #ffffff;
+  color: #000000;
+  margin-top: 0;
+}
+
+.continue-blue-btn {
+  width: 100%;
+  min-height: 56px;
+  background: #0052cc;
+  color: #ffffff;
+  border-radius: 16px;
+  font-weight: 900;
+  font-size: 18px;
+}
+
+
+.credit-approved-dashboard-card {
+  padding: 24px 20px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #e8f3ff, #cce3ff);
+  border: 1px solid #b3d7ff;
+  margin-bottom: 24px;
+}
+
+.dashboard-header-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.credit-balance-display {
+  font-size: 38px;
+  font-weight: 900;
+  color: #0033aa;
+  letter-spacing: -1px;
+}
+
+.muted-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #5577aa;
+  margin: 4px 0 0 0;
+}
+
+.active-badge {
+  font-size: 11px;
+  font-weight: 900;
+  background: var(--green);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.credit-actions-row {
+  margin-top: 20px;
+}
+
+.credit-action-pill {
+  width: 100%;
+  min-height: 48px;
+  background: #0052cc;
+  color: #fff;
+  border-radius: 14px;
+  font-weight: 800;
+  font-size: 15px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+}
+
+.credit-summary-widget {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  margin: 16px 0;
+  cursor: pointer;
+}
+
+.widget-row {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.billing-summary-panel h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+.billing-summary-panel p {
+  font-size: 14px;
+  margin: 4px 0;
+}
+
+/* Bottom Sheet Picker Configurations */
+.wheel-picker-wrapper select {
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dual-sheet-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.prominent-date-display {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--green);
+  margin: 10px 0;
+}
+
+.warning-text-note {
+  font-size: 12px;
+  color: #ff3b30;
+  font-weight: 700;
+}
+
+
+/* Regulated Form Infrastructure Elements */
+.form-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  gap: 16px;
+}
+
+.form-progress-bar-wrapper {
+  flex: 1;
+  height: 6px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.form-progress-bar-fill {
+  height: 100%;
+  background: var(--green);
+}
+
+.form-step-indicator {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.form-intro-block {
+  margin: 24px 0;
+}
+
+.form-intro-block h1 {
+  font-size: 26px;
+  font-weight: 900;
+  margin: 0 0 6px 0;
+}
+
+.form-section-title {
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  margin: 24px 0 12px 0;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #000000;
+  margin-bottom: 6px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="tel"],
+.form-group select {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 12px;
+  border: 1px solid #cccccc;
+  background: #ffffff;
+  padding: 0 14px;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.form-group select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23808080' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--green);
+}
+
+.disabled-email-input {
+  background: #eef1f4 !important;
+  color: var(--muted) !important;
+  border-color: var(--line) !important;
+  cursor: not-allowed;
+}
+
+.select-trigger {
+  cursor: pointer;
+}
+
+.custom-select-display {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 12px;
+  border: 1px solid #cccccc;
+  background: #ffffff;
+  padding: 14px;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.custom-select-display.has-val {
+  color: var(--ink);
+  font-weight: 700;
+  border-color: var(--green);
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.checkbox-container input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+}
+
+.checkbox-container label {
+  font-size: 13px;
+  color: #444444;
+  margin-bottom: 0;
+  font-weight: 600;
+}
+
+/* Submit Form Action Button State Engine */
+.submit-credit-form-btn {
+  width: 100%;
+  min-height: 56px;
+  background: rgba(0, 177, 79, 0.35); /* Translucent Green */
+  color: #ffffff;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 900;
+  margin-top: 20px;
+  cursor: not-allowed;
+  transition: background-color 0.2s ease;
+}
+
+.submit-credit-form-btn.complete-green {
+  background: var(--green); /* Full Green */
+  cursor: pointer;
+}
+
+/* Custom Scroll-Wheel Structural Properties */
+.billing-wheel-sheet,
+.billing-confirm-sheet {
+  border-radius: 24px 24px 0 0;
+  padding: 24px 20px 34px;
+}
+
+.wheel-picker-wrapper {
+  margin: 20px 0;
+  display: flex;
+  justify-content: center;
+}
+
+#wheelScrollSelector {
+  width: 80%;
+  border: none;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+  background: transparent;
+  outline: none;
+  padding: 10px;
+}
+
+#wheelScrollSelector option {
+  padding: 8px;
+  text-align: center;
+}
+
+.wheel-explanatory-text {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #666666;
+  margin-bottom: 24px;
+}
+
+.set-billing-date-btn {
+  width: 100%;
+  min-height: 52px;
+  background: var(--green);
+  color: #ffffff;
+  font-weight: 900;
+  font-size: 16px;
+  border-radius: 14px;
+}
+
+.prominent-date-display {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--green);
+  margin: 14px 0;
+}
+
+.warning-text-note {
+  font-size: 13px;
+  color: #ff3b30;
+  font-weight: 700;
+  margin-bottom: 24px;
+}
+
+.dual-sheet-buttons {
+  display: flex;
+  gap: 12px;
+}
+
 @media (max-width: 370px) {
   .app {
     padding-left: 14px;
@@ -1185,3 +1675,4 @@ button {
     gap: 5px;
   }
 }
+

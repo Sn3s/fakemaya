@@ -7,7 +7,7 @@ const peso = new Intl.NumberFormat("en-PH", {
 const defaultState = {
   tab: "wallet",
   view: "home",
-  wallet: 0,
+  wallet: 1500.00, // starting wallet balance
   savings: 164.58,
   hidden: false,
   timeDeposit: 12500,
@@ -25,6 +25,21 @@ const defaultState = {
     { title: "Created account", detail: "japan", age: "10 minutes ago", amount: "" },
     { title: "Transferred to", detail: "Maya Black E... (9278)", age: "22 hours ago", amount: "- ₱12,500.00" },
   ],
+  
+  // Credit Journey State Properties
+  creditView: "home", // home, promo, privacy, form, approved
+  creditLimit: 15000.00,
+  creditUsed: 0.00,
+  creditForm: {
+    billingDay: null,
+    gender: "",
+    maritalStatus: "",
+    altMobile: "",
+    motherFirst: "",
+    motherMiddle: "",
+    motherLast: "",
+    noMiddleName: false
+  }
 };
 
 let state = loadState();
@@ -89,27 +104,10 @@ function addTransaction(title, detail, amount = "") {
 
 function icon(name) {
   const icons = {
-    user: "♙",
-    bell: "♧",
-    eye: "◉",
-    in: "↙",
-    out: "↗",
-    bank: "▥",
-    ticket: "◉",
-    crypto: "◈",
-    hand: "♬",
-    phone: "▯",
-    bills: "▣",
-    shop: "▰",
-    more: "•••",
-    home: "m",
-    scan: "⌗",
-    grid: "▦",
-    help: "?",
-    chevron: "›",
-    account: "♙",
-    heart: "♡",
-    copy: "▢",
+    user: "♙", bell: "♧", eye: "◉", in: "↙", out: "↗", bank: "▥", ticket: "◉",
+    crypto: "◈", hand: "♬", phone: "▯", bills: "▣", shop: "▰", more: "•••",
+    home: "m", scan: "⌗", grid: "▦", help: "?", chevron: "›", account: "♙",
+    heart: "♡", copy: "▢"
   };
   return icons[name] || "";
 }
@@ -172,6 +170,14 @@ function renderWallet() {
         <button class="pill-btn" onclick="openMoneySheet('send')"><span>${icon("out")}</span> Send</button>
       `,
     })}
+    ${state.creditView === "approved" ? `
+      <section class="credit-summary-widget" onclick="go('credit')">
+        <div class="widget-row">
+          <span>💳 Maya Easy Credit Line Available</span>
+          <strong class="green-link">${money(state.creditLimit - state.creditUsed)}</strong>
+        </div>
+      </section>
+    ` : ""}
     ${transactionsPanel()}
   `;
 }
@@ -210,35 +216,395 @@ function renderSavings() {
         <div><span class="plus">+</span><h3>Create a new<br>Personal Goal</h3><div class="muted">🚀 Earn up to 8% p.a.</div></div>
       </button>
     </section>
-    <section class="express">
-      <h2 class="section-title">Express Deposit</h2>
-      <div class="list-card">
-        <button class="list-row" onclick="openMoneySheet('timeDeposit')">
-          <span class="left-stack"><span class="card-thumb">▤</span><span><b>Maya Black</b><br><span class="muted">${money(state.timeDeposit)}</span></span></span>
-          <span class="muted">›</span>
-        </button>
-        <span class="rate-chip">3.5% p.a.</span>
-      </div>
-    </section>
     ${footerCopy()}
   `;
 }
 
+/* ==========================================================================
+   UPDATED CREDIT VIEWS ENGINE (Bugs fixed + Real App Journey Extensions)
+   ========================================================================== */
 function renderCredit() {
+  if (!state.creditView) state.creditView = "home";
+  
+  if (state.creditView === "home") {
+    return `
+      ${topChrome()}
+      <section class="credit-card">
+        <span class="label-pill">MAYA EASY CREDIT</span>
+        <h1>Extra budget?</h1>
+        <p class="muted">Get up to ₱50,000 in seconds with Maya Easy Credit</p>
+        <button class="apply-btn" onclick="setCreditView('promo')">Apply now</button>
+        <div class="center-copy">Credit approval is based on your eligibility</div>
+      </section>
+      <section class="panel help-card">🤔 <b>Need help?</b><br><span class="muted">Visit our <span class="green-link">Help Center</span> to learn more</span></section>
+      ${footerCopy("Maya Easy Credit is powered by")}
+    `;
+  }
+  
+  if (state.creditView === "promo") return renderCreditPromo();
+  if (state.creditView === "privacy") return renderCreditPrivacy();
+  if (state.creditView === "form") return renderCreditForm();
+  if (state.creditView === "approved") return renderCreditApprovedDashboard();
+}
+
+function setCreditView(view) {
+  state.creditView = view;
+  if (view === 'form' && !state.creditForm) {
+    state.creditForm = {
+      billingDay: null, gender: "", maritalStatus: "", altMobile: "",
+      motherFirst: "", motherMiddle: "", motherLast: "", noMiddleName: false
+    };
+  }
+  saveState();
+  render();
+}
+
+function renderCreditPromo() {
+  return `
+    <section class="credit-flow-page black-theme">
+      <div class="flow-header-nav">
+        <button class="back-btn-light" onclick="setCreditView('home')">‹</button>
+      </div>
+      <div class="scrollable-flow-body">
+        <div class="promo-header-group">
+          <h1 class="promo-main-title">Get the funds you need with Maya Easy Credit!</h1>
+          <p class="promo-subtitle">Up to ₱50,000 in seconds</p>
+        </div>
+        <div class="puzzle-grid">
+          <div class="puzzle-box box-1">
+            <h3>Pay with credit, in-store and online</h3>
+            <p>Shop your favorite brands via QR Ph</p>
+          </div>
+          <div class="puzzle-box box-2">
+            <span class="purple-tag">COMING SOON</span>
+            <h3>Pay your bills on time</h3>
+          </div>
+          <div class="puzzle-box box-3">
+            <h3>Transfer to your Wallet</h3>
+          </div>
+          <div class="puzzle-box box-4">
+            <h3>Get load, gaming, pins, and more</h3>
+            <p>Easily buy anything in our Shop.</p>
+          </div>
+        </div>
+        <div class="promo-footer-notice">
+          For a secure and hassle-free application, your information will be shared with Maya Bank, Inc.
+        </div>
+      </div>
+      <div class="fixed-bottom-action-container">
+        <button class="apply-btn solid-white" onclick="setCreditView('privacy')">Apply Now</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderCreditPrivacy() {
+  return `
+    <section class="credit-flow-page white-theme">
+      <div class="flow-header-nav">
+        <button class="back-btn-dark" onclick="setCreditView('promo')">‹</button>
+        <span class="nav-page-title">Privacy Notice</span>
+      </div>
+      <div class="scrollable-flow-body text-body-padding">
+        <h3>Maya Bank, Inc. Privacy Policy</h3>
+        <p>This Privacy Notice explains how Maya Bank, Inc. collects, protects, uses, and shares your personal information when you apply for and use Maya Easy Credit lines.</p>
+        <p>To provide credit evaluation, credit limit assessments, financial underwriting, fraud protection, and automated account management, we require sharing permissions with Maya Bank systems.</p>
+        <p>By clicking continue, you grant explicit consent to assess transactional histories inside the digital application ecosystem to calibrate active micro-lending risk assessments under BSP guidelines.</p>
+      </div>
+      <div class="fixed-bottom-action-container">
+        <button class="continue-blue-btn" onclick="setCreditView('form')">Continue</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderCreditForm() {
+  const form = state.creditForm || {};
+  
+  const isBillingSet = form.billingDay !== null && form.billingDay !== undefined;
+  const isPersonalValid = form.gender && form.maritalStatus && String(form.altMobile).trim().length > 0;
+  const isMotherValid = String(form.motherFirst).trim().length > 0 && 
+                        (form.noMiddleName || String(form.motherMiddle).trim().length > 0) && 
+                        String(form.motherLast).trim().length > 0;
+                        
+  const isFormComplete = isBillingSet && isPersonalValid && isMotherValid;
+
+  return `
+    <section class="credit-flow-page white-theme">
+      <div class="form-top-bar">
+        <button class="back-btn-dark" onclick="setCreditView('privacy')">‹</button>
+        <div class="form-progress-bar-wrapper">
+          <div class="form-progress-bar-fill" style="width: 50%;"></div>
+        </div>
+        <span class="form-step-indicator">1/2</span>
+      </div>
+
+      <div class="scrollable-flow-body input-form-layout" id="creditFormScrollBody">
+        <div class="form-intro-block">
+          <h1>Set Up your credit</h1>
+          <p class="muted">To enjoy Maya Easy Credit, please provide the following information:</p>
+        </div>
+
+        <div class="credit-input-form">
+          <div class="form-section-title">BILLING DETAILS</div>
+          
+          <div class="form-group select-trigger" onclick="openBillingWheelSelector()">
+            <label>Billing end date</label>
+            <div class="custom-select-display ${isBillingSet ? 'has-val' : ''}">
+              ${isBillingSet ? `Every ${form.billingDay}${getOrdinalSuffix(form.billingDay)} of the month` : 'Select a billing end date'}
+            </div>
+          </div>
+
+          <div class="form-group static-field">
+            <label>Verified email address</label>
+            <input type="text" value="juan.delacruz@gmail.com" disabled class="disabled-email-input" />
+          </div>
+
+          <div class="form-section-title">PERSONAL DETAILS</div>
+          
+          <div class="form-group">
+            <label>Gender</label>
+            <select onchange="handleFormSelect('gender', this.value)">
+              <option value="" ${!form.gender ? 'selected' : ''} disabled>Select Gender</option>
+              <option value="Male" ${form.gender === 'Male' ? 'selected' : ''}>Male</option>
+              <option value="Female" ${form.gender === 'Female' ? 'selected' : ''}>Female</option>
+              <option value="Other" ${form.gender === 'Other' ? 'selected' : ''}>Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Marital status</label>
+            <select onchange="handleFormSelect('maritalStatus', this.value)">
+              <option value="" ${!form.maritalStatus ? 'selected' : ''} disabled>Select Marital Status</option>
+              <option value="Single" ${form.maritalStatus === 'Single' ? 'selected' : ''}>Single</option>
+              <option value="Married" ${form.maritalStatus === 'Married' ? 'selected' : ''}>Married</option>
+              <option value="Divorced" ${form.maritalStatus === 'Divorced' ? 'selected' : ''}>Divorced</option>
+              <option value="Widowed" ${form.maritalStatus === 'Widowed' ? 'selected' : ''}>Widowed</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Alternative mobile number</label>
+            <input type="tel" data-field="altMobile" placeholder="e.g. 09123456789" value="${form.altMobile || ''}" oninput="handleFormInput(event)" />
+          </div>
+
+          <div class="form-section-title">MOTHERS MAIDEN NAME</div>
+          
+          <div class="form-group">
+            <label>Mothers maiden first name</label>
+            <input type="text" data-field="motherFirst" placeholder="Enter first name" value="${form.motherFirst || ''}" oninput="handleFormInput(event)" />
+          </div>
+
+          <div class="form-group">
+            <label>Mothers maiden middle name</label>
+            <input type="text" id="motherMiddleInput" data-field="motherMiddle" placeholder="Enter middle name" ${form.noMiddleName ? 'disabled' : ''} value="${form.motherMiddle || ''}" oninput="handleFormInput(event)" />
+            <div class="checkbox-container">
+              <input type="checkbox" id="noMiddleNameCheck" ${form.noMiddleName ? 'checked' : ''} onchange="handleFormCheckbox(this.checked)" />
+              <label for="noMiddleNameCheck">No legal middle name</label>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Mothers maiden last name</label>
+            <input type="text" data-field="motherLast" placeholder="Enter last name" value="${form.motherLast || ''}" oninput="handleFormInput(event)" />
+          </div>
+        </div>
+      </div>
+
+      <div class="fixed-bottom-action-container">
+        <button id="creditSubmitBtn" class="submit-credit-form-btn ${isFormComplete ? 'complete-green' : ''}" ${!isFormComplete ? 'disabled' : ''} onclick="submitCreditApplication()">
+          Continue
+        </button>
+      </div>
+    </section>
+  `;
+}
+
+/* Event handling functions to fix input focus loss bugs */
+function handleFormInput(e) {
+  const field = e.target.getAttribute('data-field');
+  state.creditForm[field] = e.target.value;
+  saveState();
+  
+  // Recalculate and update the button styling without rerendering the DOM
+  const form = state.creditForm;
+  const isBillingSet = form.billingDay !== null && form.billingDay !== undefined;
+  const isPersonalValid = form.gender && form.maritalStatus && String(form.altMobile).trim().length > 0;
+  const isMotherValid = String(form.motherFirst).trim().length > 0 && 
+                        (form.noMiddleName || String(form.motherMiddle).trim().length > 0) && 
+                        String(form.motherLast).trim().length > 0;
+  const isFormComplete = isBillingSet && isPersonalValid && isMotherValid;
+  
+  const submitBtn = document.querySelector("#creditSubmitBtn");
+  if (submitBtn) {
+    if (isFormComplete) {
+      submitBtn.classList.add("complete-green");
+      submitBtn.removeAttribute("disabled");
+    } else {
+      submitBtn.classList.remove("complete-green");
+      submitBtn.setAttribute("disabled", "true");
+    }
+  }
+}
+
+function handleFormSelect(field, val) {
+  state.creditForm[field] = val;
+  saveState();
+  render();
+}
+
+function handleFormCheckbox(checked) {
+  state.creditForm.noMiddleName = checked;
+  if(checked) state.creditForm.motherMiddle = "";
+  saveState();
+  render();
+}
+
+function getOrdinalSuffix(i) {
+  var j = i % 10, k = i % 100;
+  if (j == 1 && k != 11) return "st";
+  if (j == 2 && k != 12) return "nd";
+  if (j == 3 && k != 13) return "rd";
+  return "th";
+}
+
+function openBillingWheelSelector() {
+  modalRoot.className = "modal-root active";
+  modalRoot.setAttribute("aria-hidden", "false");
+  
+  let optionsHtml = '';
+  for(let d = 1; d <= 27; d++) {
+    optionsHtml += `<option value="${d}">Day ${d}</option>`;
+  }
+
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <div class="sheet billing-wheel-sheet" role="dialog" aria-modal="true">
+      <h2>Select a billing end date</h2>
+      <div class="wheel-picker-wrapper">
+        <select id="wheelScrollSelector" size="5">
+          ${optionsHtml}
+        </select>
+      </div>
+      <p class="wheel-explanatory-text">
+        The day selected is the cutoff for all your credit transactions per billing coverage period. Your first due date will be 15 days after your billing end date.
+      </p>
+      <button class="set-billing-date-btn" onclick="confirmBillingSelectionStep()">Set billing end date</button>
+    </div>
+  `;
+}
+
+function confirmBillingSelectionStep() {
+  const selectedDay = document.querySelector("#wheelScrollSelector").value || 1;
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <div class="sheet billing-confirm-sheet" role="dialog" aria-modal="true">
+      <h2>Confirm billing end date</h2>
+      <p class="muted">Your billing end date is set to:</p>
+      <div class="prominent-date-display">Every ${selectedDay}${getOrdinalSuffix(parseInt(selectedDay))} of the month.</div>
+      <p class="warning-text-note">Once set, you won't be able to edit it later.</p>
+      <div class="dual-sheet-buttons">
+        <button class="pill-btn ghost" onclick="openBillingWheelSelector()">Change</button>
+        <button class="pill-btn solid" onclick="saveConfirmedBillingDate(${selectedDay})">Confirm</button>
+      </div>
+    </div>
+  `;
+}
+
+function saveConfirmedBillingDate(day) {
+  state.creditForm.billingDay = parseInt(day);
+  saveState();
+  closeModal();
+  render();
+}
+
+function submitCreditApplication() {
+  toast("Credit Approved Intelligently!");
+  state.creditView = "approved"; // Advances directly to the dashboard feature
+  saveState();
+  render();
+}
+
+/* ==========================================================================
+   NEW RECREATED APP JOURNEY: MAYA EASY CREDIT DASHBOARD MANAGEMENT
+   ========================================================================== */
+function renderCreditApprovedDashboard() {
+  const availableCredit = state.creditLimit - state.creditUsed;
   return `
     ${topChrome()}
-    <section class="credit-card">
-      <span class="label-pill">MAYA EASY CREDIT</span>
-      <h1>Extra budget?</h1>
-      <p class="muted">Get up to ₱50,000 in seconds with Maya Easy Credit</p>
-      <button class="apply-btn" onclick="toast('Credit application started')">Apply now</button>
-      <div class="center-copy">Credit approval is based on your eligibility</div>
+    <section class="credit-approved-dashboard-card">
+      <div class="dashboard-header-line">
+        <div>
+          <div class="credit-balance-display">${money(availableCredit)}</div>
+          <p class="muted-label">Available Credit Limit / ${money(state.creditLimit)}</p>
+        </div>
+        <span class="active-badge">ACTIVE</span>
+      </div>
+      <div class="credit-actions-row">
+        <button class="credit-action-pill" onclick="openCreditTransferSheet()">
+          <span>${icon("out")}</span> Transfer to Wallet
+        </button>
+      </div>
     </section>
-    <section class="panel help-card">🤔 <b>Need help?</b><br><span class="muted">Visit our <span class="green-link">Help Center</span> to learn more</span></section>
+
+    <h2 class="section-title">Credit Benefits</h2>
+    <div class="puzzle-grid">
+      <div class="puzzle-box box-1" style="background:#fff; color:#000; border:1px solid var(--line);">
+        <h3 style="color:#000;">💳 Scan QR Ph to Pay</h3>
+        <p>Use your available credit line seamlessly at grocery checkouts or online merchant channels.</p>
+      </div>
+    </div>
+
+    <section class="panel billing-summary-panel">
+      <h3>Billing Cycle Data</h3>
+      <p class="muted">Cut-off date: <b>Every ${state.creditForm.billingDay || 15}${getOrdinalSuffix(state.creditForm.billingDay || 15)} of the month</b></p>
+      <p class="muted">Payment Terms: 15 Days after cut-off</p>
+    </section>
     ${footerCopy("Maya Easy Credit is powered by")}
   `;
 }
 
+function openCreditTransferSheet() {
+  const availableCredit = state.creditLimit - state.creditUsed;
+  modalRoot.className = "modal-root active";
+  modalRoot.setAttribute("aria-hidden", "false");
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <section class="sheet" role="dialog" aria-modal="true">
+      <h2>Transfer to Wallet</h2>
+      <p class="muted">Draw funds out from your available credit limit line instantly.</p>
+      <p class="muted" style="margin-bottom:8px;">Max available: <b>${money(availableCredit)}</b></p>
+      <label class="field">Amount
+        <input id="creditAmountInput" inputmode="decimal" type="number" min="1" step="0.01" placeholder="₱0.00" autofocus />
+      </label>
+      <div class="sheet-actions">
+        <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="pill-btn solid" onclick="executeCreditTransfer()">Transfer</button>
+      </div>
+    </section>
+  `;
+}
+
+function executeCreditTransfer() {
+  const inputAmt = Number(document.querySelector("#creditAmountInput")?.value || 0);
+  const availableCredit = state.creditLimit - state.creditUsed;
+  
+  if (!inputAmt || inputAmt <= 0) return toast("Enter a valid amount");
+  if (inputAmt > availableCredit) return toast("Exceeds available credit line limit");
+  
+  state.creditUsed += inputAmt;
+  state.wallet += inputAmt;
+  addTransaction("Credit Drawdown", "Transferred to Wallet", `+ ${peso.format(inputAmt)}`);
+  
+  saveState();
+  closeModal();
+  render();
+  toast(`₱${inputAmt.toFixed(2)} transferred to wallet`);
+}
+
+/* ==========================================================================
+   REST OF THE BASIC APPLICATION FRAMEWORK
+   ========================================================================== */
 function renderLoans() {
   return `
     ${topChrome()}
@@ -700,3 +1066,4 @@ function render() {
 }
 
 render();
+
