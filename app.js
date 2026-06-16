@@ -127,7 +127,7 @@ function shell(content) {
 function topChrome() {
   return `
     <header class="topbar">
-      <button class="avatar" aria-label="Profile">${icon("user")}</button>
+      <button class="avatar" aria-label="Profile" onclick="openView('profile')">${icon("user")}</button>
       <div class="top-actions">
         <button class="bell" aria-label="Notifications">♧</button>
         <span class="xp">183 XP</span>
@@ -266,6 +266,35 @@ function renderCards() {
       <h2>Maya Cards</h2>
       <p class="muted">A card management area styled after the app tabs. Link physical and virtual cards, set limits, and review activity.</p>
       <button class="apply-btn" onclick="toast('Card request started')">Request a card</button>
+    </section>
+  `;
+}
+
+function renderProfile() {
+  return `
+    <section class="profile-page">
+      <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
+      <div class="profile-head">
+        <button class="back" onclick="openView('home')" aria-label="Back">‹</button>
+        <h2>Profile</h2>
+        <span></span>
+      </div>
+      <section class="profile-hero">
+        <div class="profile-avatar">${icon("user")}</div>
+        <h1>Juan Dela Cruz</h1>
+        <p class="muted">Static account details</p>
+      </section>
+      <section class="profile-card">
+        <div class="profile-row">
+          <span>Name</span>
+          <strong>Juan Dela Cruz</strong>
+        </div>
+        <div class="profile-row">
+          <span>Phone number</span>
+          <strong>+63 917 372 8852</strong>
+        </div>
+      </section>
+      <button class="logout-btn" onclick="toast('Logged out')">Log out</button>
     </section>
   `;
 }
@@ -646,6 +675,10 @@ function toast(message) {
 
 function render() {
   let content = "";
+  if (state.view === "profile") {
+    app.innerHTML = renderProfile();
+    return;
+  }
   if (state.view === "mySavings") {
     app.innerHTML = renderSavingsDetail();
     return;
