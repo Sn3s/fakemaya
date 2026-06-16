@@ -167,17 +167,6 @@ function balanceCard({ amount, label, actions, extra = "" }) {
 }
 
 function renderWallet() {
-  const services = [
-    ["bank", "Bank<br>transfer", ""],
-    ["ticket", "Raffle<br>Promo", ""],
-    ["crypto", "Crypto", ""],
-    ["hand", "Refer<br>& Earn", "Win ₱1K"],
-    ["phone", "Load", ""],
-    ["bills", "Bills", ""],
-    ["shop", "Shop", ""],
-    ["more", "More", ""],
-  ];
-
   return `
     ${topChrome()}
     ${balanceCard({
@@ -189,22 +178,6 @@ function renderWallet() {
         <button class="pill-btn" onclick="openMoneySheet('send')"><span>${icon("out")}</span> Send</button>
       `,
     })}
-    <section class="credit-strip">
-      <div><h3>Easy Credit</h3><div class="muted">Borrow up to ₱50K</div></div>
-      <button class="mini-btn" onclick="go('credit')">Get it now</button>
-    </section>
-    <section class="quick-grid">
-      ${services.map(([key, label, badge]) => `
-        <button class="service" onclick="toast('${label.replace("<br>", " ")} opened')">
-          <span class="service-icon">${badge ? `<span class="badge-red">${badge}</span>` : ""}${icon(key)}</span>
-          <span>${label}</span>
-        </button>
-      `).join("")}
-    </section>
-    <section class="promo">
-      <div><b>EXTRA BILLS NA<br>EXTRA BUDGET SA</b><br><strong>maya</strong></div>
-      <span>Up to ₱250,000 in seconds ›</span>
-    </section>
     ${transactionsPanel()}
   `;
 }
