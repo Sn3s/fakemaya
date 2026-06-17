@@ -679,6 +679,11 @@ button {
   color: #fff;
 }
 
+.login-primary:disabled {
+  background: #9adfb9;
+  cursor: wait;
+}
+
 .login-divider {
   display: flex;
   align-items: center;

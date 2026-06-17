@@ -62,6 +62,7 @@ let session = null;
 let state = cloneDefaultState();
 let booting = true;
 let authMode = "signin";
+let authSubmitting = false;
 const app = document.querySelector("#app");
 const modalRoot = document.querySelector("#modalRoot");
 
@@ -196,6 +197,7 @@ async function signInWithEmail(event) {
 async function createAccountWithEmail(event) {
   event.preventDefault();
   if (!supabaseClient) return toast("Supabase failed to load");
+  if (authSubmitting) return;
 
   const form = event.currentTarget;
   const email = accountKey(form.email.value);
@@ -206,13 +208,24 @@ async function createAccountWithEmail(event) {
   if (password.length < 6) return toast("Password must be at least 6 characters");
   if (password !== confirmPassword) return toast("Passwords do not match");
 
+  authSubmitting = true;
+  render();
+
   const { data, error } = await supabaseClient.auth.signUp({
     email,
     password,
     options: { data: { full_name: displayNameFromEmail(email) } },
   });
 
-  if (error) return toast(error.message);
+  authSubmitting = false;
+
+  if (error) {
+    render();
+    if (error.message.toLowerCase().includes("rate limit")) {
+      return toast("Email limit hit. Wait a bit or disable confirmations while testing.");
+    }
+    return toast(error.message);
+  }
 
   if (!data.session) {
     authMode = "signin";
@@ -302,7 +315,7 @@ function renderSignup() {
         <label>Confirm password
           <input name="confirmPassword" type="password" autocomplete="new-password" placeholder="Confirm password" minlength="6" required />
         </label>
-        <button class="login-primary" type="submit">Create account</button>
+        <button class="login-primary" type="submit" ${authSubmitting ? "disabled" : ""}>${authSubmitting ? "Creating..." : "Create account"}</button>
       </form>
       <button class="create-account-btn quiet" onclick="setAuthMode('signin')" type="button">Already have an account? Sign in</button>
     </section>
