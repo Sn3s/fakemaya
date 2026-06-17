@@ -7,7 +7,11 @@ const peso = new Intl.NumberFormat("en-PH", {
 const SUPABASE_URL = "https://rizxgcgooukdckpfhkkr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_7kUampSawoDOCylHDsHyHQ_43TopGft";
 const WALLET_TABLE = "wallet_states";
-const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const SUPABASE_SCRIPT_URLS = [
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+  "https://unpkg.com/@supabase/supabase-js@2",
+];
+let supabaseClient = null;
 
 const defaultState = {
   tab: "wallet",
@@ -126,10 +130,51 @@ function walletRowPayload(user = session?.user) {
   };
 }
 
-async function loadWalletState(user) {
-  if (!supabaseClient || !user) return cloneDefaultState();
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      if (window.supabase) resolve();
+      return;
+    }
 
-  const { data, error } = await supabaseClient
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureSupabaseClient() {
+  if (supabaseClient) return supabaseClient;
+
+  for (const src of SUPABASE_SCRIPT_URLS) {
+    if (!window.supabase) {
+      try {
+        await loadScript(src);
+      } catch {
+        continue;
+      }
+    }
+
+    if (window.supabase?.createClient) {
+      supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+      return supabaseClient;
+    }
+  }
+
+  return null;
+}
+
+async function loadWalletState(user) {
+  const client = await ensureSupabaseClient();
+  if (!client || !user) return cloneDefaultState();
+
+  const { data, error } = await client
     .from(WALLET_TABLE)
     .select("app_state,wallet,savings,time_deposit,goal_balance")
     .eq("user_id", user.id)
@@ -161,10 +206,11 @@ async function loadWalletState(user) {
 }
 
 async function persistWalletState(user = session?.user, snapshot = state) {
-  if (!supabaseClient || !user) return;
+  const client = await ensureSupabaseClient();
+  if (!client || !user) return;
   const previousState = state;
   state = snapshot;
-  const { error } = await supabaseClient
+  const { error } = await client
     .from(WALLET_TABLE)
     .upsert(walletRowPayload(user), { onConflict: "user_id" });
   state = previousState;
@@ -175,7 +221,8 @@ async function persistWalletState(user = session?.user, snapshot = state) {
 
 async function signInWithEmail(event) {
   event.preventDefault();
-  if (!supabaseClient) return toast("Supabase failed to load");
+  const client = await ensureSupabaseClient();
+  if (!client) return toast("Supabase could not load. Check your connection and refresh.");
 
   const form = event.currentTarget;
   const email = accountKey(form.email.value);
@@ -183,7 +230,7 @@ async function signInWithEmail(event) {
 
   if (!email || !password) return toast("Enter your email and password");
 
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error) return toast(error.message);
   if (!data.session) return toast("Check your email to confirm this account, then sign in");
 
@@ -196,7 +243,8 @@ async function signInWithEmail(event) {
 
 async function createAccountWithEmail(event) {
   event.preventDefault();
-  if (!supabaseClient) return toast("Supabase failed to load");
+  const client = await ensureSupabaseClient();
+  if (!client) return toast("Supabase could not load. Check your connection and refresh.");
   if (authSubmitting) return;
 
   const form = event.currentTarget;
@@ -211,7 +259,7 @@ async function createAccountWithEmail(event) {
   authSubmitting = true;
   render();
 
-  const { data, error } = await supabaseClient.auth.signUp({
+  const { data, error } = await client.auth.signUp({
     email,
     password,
     options: { data: { full_name: displayNameFromEmail(email) } },
@@ -241,9 +289,10 @@ async function createAccountWithEmail(event) {
 }
 
 async function signInWithGoogle() {
-  if (!supabaseClient) return toast("Supabase failed to load");
+  const client = await ensureSupabaseClient();
+  if (!client) return toast("Supabase could not load. Check your connection and refresh.");
 
-  const { error } = await supabaseClient.auth.signInWithOAuth({
+  const { error } = await client.auth.signInWithOAuth({
     provider: "google",
     options: { redirectTo: window.location.href.split("#")[0] },
   });
@@ -327,20 +376,21 @@ function saveState() {
 }
 
 async function initApp() {
-  if (!supabaseClient) {
+  const client = await ensureSupabaseClient();
+  if (!client) {
     booting = false;
     render();
-    toast("Supabase client is unavailable");
+    toast("Supabase client is unavailable. Check your connection and refresh.");
     return;
   }
 
-  const { data } = await supabaseClient.auth.getSession();
+  const { data } = await client.auth.getSession();
   session = data.session;
   if (session?.user) {
     state = await loadWalletState(session.user);
   }
 
-  supabaseClient.auth.onAuthStateChange(async (event, nextSession) => {
+  client.auth.onAuthStateChange(async (event, nextSession) => {
     session = nextSession;
     if (nextSession?.user) {
       state = await loadWalletState(nextSession.user);
