@@ -31,7 +31,7 @@ const defaultState = {
   },
   depositFlow: null,
   transactions: [
-    { title: "Account opened", detail: "Welcome wallet funds", age: "Just now", amount: "+ ₱1,000.00" },
+    { title: "Account opened", detail: "Welcome wallet funds", amount: "+ ₱1,000.00", createdAt: new Date().toISOString() },
   ],
   
   // Credit Journey State Properties
@@ -445,8 +445,26 @@ function resetDepositFlow() {
 }
 
 function addTransaction(title, detail, amount = "") {
-  state.transactions.unshift({ title, detail, amount, age: "Just now" });
+  state.transactions.unshift({
+    title,
+    detail,
+    amount,
+    createdAt: new Date().toISOString(),
+  });
   state.transactions = state.transactions.slice(0, 5);
+}
+
+function formatTransactionDateTime(tx) {
+  if (!tx.createdAt) return tx.age || "";
+  const date = new Date(tx.createdAt);
+  if (Number.isNaN(date.getTime())) return tx.age || "";
+  return new Intl.DateTimeFormat("en-PH", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function icon(name) {
@@ -1708,7 +1726,7 @@ function transactionsPanel() {
       ${state.transactions.slice(0, 2).map((tx) => `
         <div class="transaction-line">
           <span>${tx.title}<strong>${tx.detail}</strong></span>
-          <span style="text-align:right">${tx.age}<strong>${tx.amount}</strong></span>
+          <span class="transaction-meta">${formatTransactionDateTime(tx)}<strong>${tx.amount}</strong></span>
         </div>
       `).join("")}
     </section>

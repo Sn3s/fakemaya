@@ -970,6 +970,16 @@ button {
   font-weight: 750;
 }
 
+.transaction-line > span:first-child {
+  min-width: 0;
+}
+
+.transaction-meta {
+  max-width: 150px;
+  text-align: right;
+  line-height: 1.25;
+}
+
 .transaction-line strong {
   display: block;
   color: #000;
