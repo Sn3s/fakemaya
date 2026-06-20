@@ -1482,9 +1482,61 @@ function renderProfile() {
           <strong>${escapeHTML(account?.phone || "+63 917 000 0000")}</strong>
         </div>
       </section>
+      <button class="reset-account-btn" onclick="openResetAccountSheet()">Reset account</button>
       <button class="logout-btn" onclick="logout()">Log out</button>
     </section>
   `;
+}
+
+function openResetAccountSheet() {
+  modalRoot.className = "modal-root active";
+  modalRoot.setAttribute("aria-hidden", "false");
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="resetAccountTitle">
+      <h2 id="resetAccountTitle">Reset account?</h2>
+      <p class="muted">This will set all balances, savings, goals, credit, and loans to zero and clear your transaction history. Your profile and login will remain.</p>
+      <div class="sheet-actions">
+        <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="pill-btn reset-confirm-btn" onclick="resetAccount()">Reset everything</button>
+      </div>
+    </section>
+  `;
+}
+
+function resetAccount() {
+  state.wallet = 0;
+  state.savings = 0;
+  state.timeDeposit = 0;
+  state.goal = {
+    ...state.goal,
+    balance: 0,
+    target: 0,
+    daysLeft: 0,
+    rate: 0,
+  };
+  state.depositFlow = null;
+  state.transactions = [];
+  state.creditLimit = 0;
+  state.creditUsed = 0;
+  state.creditView = "home";
+  state.loanSetup = {
+    amount: 0,
+    tenure: 0,
+    purpose: "",
+    monthlyIncome: "",
+    employmentType: "",
+  };
+  state.activeLoan = null;
+  state.loanView = "home";
+  state.hidden = false;
+  state.tab = "wallet";
+  state.view = "home";
+
+  saveState();
+  closeModal();
+  render();
+  toast("Account reset. Everything is now zero.");
 }
 
 function renderSavingsDetail() {
