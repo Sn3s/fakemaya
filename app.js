@@ -1768,6 +1768,11 @@ function openMoneySheet(kind) {
           <input id="recipientInput" type="text" placeholder="Bank or Maya Number of Recepient" autocomplete="off" maxlength="100" />
         </label>
       ` : ""}
+      ${kind === "cashin" ? `
+        <label class="field">Source
+          <input id="cashInSourceInput" type="text" placeholder="Bank or Maya Number where the cash in came from" autocomplete="off" maxlength="100" />
+        </label>
+      ` : ""}
       <div class="sheet-actions">
         <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
         <button class="pill-btn solid" onclick="submitMoney('${kind}')">Continue</button>
@@ -1785,8 +1790,10 @@ function submitMoney(kind) {
   }
 
   if (kind === "cashin") {
+    const source = document.querySelector("#cashInSourceInput")?.value.trim() || "";
+    if (!source) return toast("Enter the bank or Maya number the cash in came from");
     state.wallet += amount;
-    addTransaction("Cash in", "Wallet", `+ ${peso.format(amount)}`);
+    addTransaction("Cash in", `From: ${source}`, `+ ${peso.format(amount)}`);
   }
   if (kind === "send") {
     const recipient = document.querySelector("#recipientInput")?.value.trim() || "";
