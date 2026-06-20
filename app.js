@@ -1725,8 +1725,8 @@ function transactionsPanel() {
       <div class="transactions-head"><h2>Transactions</h2><button class="green-link" onclick="toast('All transactions opened')">See all</button></div>
       ${state.transactions.slice(0, 2).map((tx) => `
         <div class="transaction-line">
-          <span>${tx.title}<strong>${tx.detail}</strong></span>
-          <span class="transaction-meta">${formatTransactionDateTime(tx)}<strong>${tx.amount}</strong></span>
+          <span>${escapeHTML(tx.title)}<strong>${escapeHTML(tx.detail)}</strong></span>
+          <span class="transaction-meta">${escapeHTML(formatTransactionDateTime(tx))}<strong>${escapeHTML(tx.amount)}</strong></span>
         </div>
       `).join("")}
     </section>
@@ -1746,7 +1746,7 @@ function footerCopy(prefix = "Maya Savings is powered by Maya Bank, Inc.") {
 function openMoneySheet(kind) {
   const labels = {
     cashin: ["Cash in", "Add money to your wallet"],
-    send: ["Send", "Send from your wallet"],
+    send: ["Send money", "Simulate sending money from your wallet. This will be recorded as an expense."],
     deposit: ["Deposit", "Move wallet money to My Savings"],
     transfer: ["Transfer", "Move savings money to your wallet"],
     timeDeposit: ["Express Deposit", "Add to Maya Black time deposit"],
@@ -1763,6 +1763,11 @@ function openMoneySheet(kind) {
       <label class="field">Amount
         <input id="amountInput" inputmode="decimal" type="number" min="1" step="0.01" placeholder="₱0.00" autofocus />
       </label>
+      ${kind === "send" ? `
+        <label class="field">Recipient
+          <input id="recipientInput" type="text" placeholder="Bank or Maya Number of Recepient" autocomplete="off" maxlength="100" />
+        </label>
+      ` : ""}
       <div class="sheet-actions">
         <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
         <button class="pill-btn solid" onclick="submitMoney('${kind}')">Continue</button>
@@ -1774,7 +1779,7 @@ function openMoneySheet(kind) {
 
 function submitMoney(kind) {
   const amount = Number(document.querySelector("#amountInput")?.value || 0);
-  if (!amount || amount < 0) {
+  if (!Number.isFinite(amount) || amount <= 0) {
     toast("Enter a valid amount");
     return;
   }
@@ -1784,9 +1789,11 @@ function submitMoney(kind) {
     addTransaction("Cash in", "Wallet", `+ ${peso.format(amount)}`);
   }
   if (kind === "send") {
+    const recipient = document.querySelector("#recipientInput")?.value.trim() || "";
+    if (!recipient) return toast("Enter the recipient's bank or Maya number");
     if (amount > state.wallet) return toast("Insufficient wallet balance");
     state.wallet -= amount;
-    addTransaction("Sent money", "Maya contact", `- ${peso.format(amount)}`);
+    addTransaction("Sent money (simulated)", `To: ${recipient} · Simulated expense`, `- ${peso.format(amount)}`);
   }
   if (kind === "deposit") {
     if (amount > state.wallet) return toast("Cash in first to deposit");
@@ -1815,7 +1822,7 @@ function submitMoney(kind) {
   saveState();
   closeModal();
   render();
-  toast(`${peso.format(amount)} processed`);
+  toast(kind === "send" ? `${peso.format(amount)} simulated send recorded` : `${peso.format(amount)} processed`);
 }
 
 function openGoalSheet() {
