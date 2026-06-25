@@ -61,7 +61,9 @@ const defaultState = {
   stocksProfileComplete: false,
   stocksFlow: null,
   stockHoldings: {},
-  stockTransactions: []
+  stockTransactions: [],
+  marketPrices: {},
+  marketLastUpdated: null
   // ───────────────────────────────────────────────────────────────────
 
 };
@@ -73,14 +75,36 @@ let authMode = "signin";
 let authSubmitting = false;
 const app = document.querySelector("#app");
 const modalRoot = document.querySelector("#modalRoot");
+let marketTimer = null;
+let marketLoading = false;
 
 const stocksCatalog = [
-  { symbol: "BTC", name: "Bitcoin", price: 3785577.87, change: -2.03, color: "#f7931a", about: "Bitcoin is considered to be the first cryptocurrency. It is a peer-to-peer online currency whose transactions happen directly between equal participants." },
-  { symbol: "PAXG", name: "PAX Gold", price: 243887.91, change: -2.64, color: "#d8c21f", about: "PAX Gold is a crypto asset backed by physical gold, designed to track the value of one fine troy ounce of gold." },
-  { symbol: "YFI", name: "Yearn Finance", price: 105281.61, change: -2.27, color: "#0878df", about: "Yearn Finance is a decentralized finance protocol that helps users access automated yield strategies." },
-  { symbol: "ETH", name: "Ethereum", price: 101100.00, change: -1.73, color: "#627eea", about: "Ethereum is a blockchain platform used for smart contracts, decentralized apps, and digital assets." },
-  { symbol: "BNB", name: "BNB", price: 35075.87, change: -1.56, color: "#f3ba2f", about: "BNB is a crypto asset used across the BNB Chain ecosystem and related exchange services." },
-  { symbol: "AAVE", name: "Aave", price: 5095.25, change: 15.47, color: "#7b79ff", about: "Aave is a decentralized liquidity protocol where users can supply, borrow, and manage crypto assets." },
+  {
+    symbol: "BTC",
+    ticker: "BTC",
+    name: "Bitcoin",
+    type: "crypto",
+    unitLabel: "coins",
+    unitSingular: "coin",
+    price: 3785577.87,
+    change: -2.03,
+    color: "#f7931a",
+    source: "CoinGecko",
+    about: "Bitcoin is considered to be the first cryptocurrency. It is a peer-to-peer online currency whose transactions happen directly between equal participants.",
+  },
+  {
+    symbol: "NVDA",
+    ticker: "NVDA",
+    name: "NVIDIA",
+    type: "stock",
+    unitLabel: "shares",
+    unitSingular: "share",
+    price: 7350.00,
+    change: 1.18,
+    color: "#76b900",
+    source: "Yahoo Finance",
+    about: "NVIDIA designs graphics processors, accelerated computing platforms, and AI chips used in gaming, data centers, cloud computing, and professional visualization.",
+  },
 ];
 
 const stocksQuestions = [
@@ -520,6 +544,122 @@ function addTransaction(title, detail, amount = "") {
     createdAt: new Date().toISOString(),
   });
   state.transactions = state.transactions.slice(0, 5);
+}
+
+function formatClock(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-PH", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function parseCsvLine(line) {
+  const cells = [];
+  let value = "";
+  let quoted = false;
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      cells.push(value);
+      value = "";
+    } else {
+      value += char;
+    }
+  }
+  cells.push(value);
+  return cells.map((cell) => cell.trim());
+}
+
+async function fetchTextWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), options.timeout || 7000);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function fetchJsonWithTimeout(url, options = {}) {
+  return JSON.parse(await fetchTextWithTimeout(url, options));
+}
+
+async function fetchUsdPhpRate() {
+  try {
+    const data = await fetchJsonWithTimeout("https://api.frankfurter.app/latest?from=USD&to=PHP");
+    const rate = Number(data?.rates?.PHP);
+    if (Number.isFinite(rate) && rate > 0) return rate;
+  } catch {
+    // Keep the app usable offline or when a quote provider blocks the request.
+  }
+  return 58;
+}
+
+async function fetchBitcoinPrice() {
+  try {
+    const data = await fetchJsonWithTimeout("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=php&include_24hr_change=true");
+    const price = Number(data?.bitcoin?.php);
+    const change = Number(data?.bitcoin?.php_24h_change);
+    if (Number.isFinite(price) && price > 0) {
+      return { price, change: Number.isFinite(change) ? change : 0, source: "CoinGecko" };
+    }
+  } catch {
+    // Binance + FX fallback below.
+  }
+
+  const usdPhp = await fetchUsdPhpRate();
+  const data = await fetchJsonWithTimeout("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT");
+  const usdPrice = Number(data?.lastPrice);
+  const change = Number(data?.priceChangePercent);
+  if (!Number.isFinite(usdPrice) || usdPrice <= 0) throw new Error("BTC price unavailable");
+  return { price: usdPrice * usdPhp, change: Number.isFinite(change) ? change : 0, source: "Binance" };
+}
+
+async function fetchNvidiaPrice() {
+  const usdPhp = await fetchUsdPhpRate();
+  const data = await fetchJsonWithTimeout("https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=1d&interval=1m");
+  const result = data?.chart?.result?.[0];
+  const meta = result?.meta || {};
+  const usdPrice = Number(meta.regularMarketPrice || meta.previousClose || meta.chartPreviousClose);
+  const previousClose = Number(meta.previousClose || meta.chartPreviousClose);
+  if (!Number.isFinite(usdPrice) || usdPrice <= 0) throw new Error("NVDA price unavailable");
+  const change = Number.isFinite(previousClose) && previousClose > 0 ? ((usdPrice - previousClose) / previousClose) * 100 : 0;
+  return { price: usdPrice * usdPhp, change, source: "Yahoo Finance" };
+}
+
+async function refreshMarketPrices({ silent = false } = {}) {
+  if (marketLoading) return;
+  marketLoading = true;
+  try {
+    const [btc, nvda] = await Promise.allSettled([fetchBitcoinPrice(), fetchNvidiaPrice()]);
+    const next = { ...(state.marketPrices || {}) };
+    if (btc.status === "fulfilled") next.BTC = btc.value;
+    if (nvda.status === "fulfilled") next.NVDA = nvda.value;
+    state.marketPrices = next;
+    state.marketLastUpdated = new Date().toISOString();
+    if (["stocks", "stockDetail", "stockTrade", "stockHistory"].includes(state.view)) render();
+  } catch {
+    if (!silent) toast("Live prices unavailable. Showing sample prices.");
+  } finally {
+    marketLoading = false;
+  }
+}
+
+function startMarketTracking() {
+  if (marketTimer) return;
+  refreshMarketPrices({ silent: true });
+  marketTimer = setInterval(() => refreshMarketPrices({ silent: true }), 30000);
+}
+
+function stopMarketTracking() {
+  if (!marketTimer) return;
+  clearInterval(marketTimer);
+  marketTimer = null;
 }
 
 function formatTransactionDateTime(tx) {
@@ -1629,6 +1769,8 @@ function resetAccount() {
   state.stocksFlow = null;
   state.stockHoldings = {};
   state.stockTransactions = [];
+  state.marketPrices = {};
+  state.marketLastUpdated = null;
   state.selectedStock = null;
   state.stockTradeSide = null;
   state.hidden = false;
@@ -1987,14 +2129,26 @@ function submitMoney(kind) {
 }
 
 function stockBySymbol(symbol) {
-  return stocksCatalog.find((stock) => stock.symbol === symbol) || stocksCatalog[0];
+  const base = stocksCatalog.find((stock) => stock.symbol === symbol) || stocksCatalog[0];
+  const live = state.marketPrices?.[base.symbol];
+  return {
+    ...base,
+    ...(live || {}),
+    price: Number(live?.price || base.price),
+    change: Number(live?.change ?? base.change),
+    source: live?.source || base.source,
+  };
 }
 
 function stockPortfolioValue() {
-  return stocksCatalog.reduce((total, stock) => total + (Number(state.stockHoldings?.[stock.symbol] || 0) * stock.price), 0);
+  return stocksCatalog.reduce((total, asset) => {
+    const liveAsset = stockBySymbol(asset.symbol);
+    return total + (Number(state.stockHoldings?.[asset.symbol] || 0) * liveAsset.price);
+  }, 0);
 }
 
 function openStocks() {
+  startMarketTracking();
   if (state.stocksProfileComplete) {
     setState({ view: "stocks" });
     return;
@@ -2070,10 +2224,24 @@ function addStockTransaction(side, stock, shares, amount) {
     symbol: stock.symbol,
     name: stock.name,
     shares,
+    unitLabel: stock.unitLabel,
+    type: stock.type,
     amount,
     createdAt: new Date().toISOString(),
   });
   state.stockTransactions = state.stockTransactions.slice(0, 20);
+}
+
+function assetUnit(asset, amount = 2) {
+  return amount === 1 ? asset.unitSingular : asset.unitLabel;
+}
+
+function assetClassLabel(asset) {
+  return asset.type === "stock" ? "stock" : "crypto";
+}
+
+function assetActionCopy(asset) {
+  return asset.type === "stock" ? "shares" : "coins";
 }
 
 function submitStockTrade(event) {
@@ -2084,27 +2252,36 @@ function submitStockTrade(event) {
   const amount = Number(form.amount.value || 0);
   if (!Number.isFinite(amount) || amount <= 0) return toast("Enter a valid amount");
 
-  const shares = Number((amount / stock.price).toFixed(4));
+  const units = Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
   if (side === "buy") {
     if (amount > state.wallet) return toast("Insufficient wallet balance");
     state.wallet -= amount;
-    state.stockHoldings[stock.symbol] = Number((Number(state.stockHoldings[stock.symbol] || 0) + shares).toFixed(4));
-    addStockTransaction("Bought", stock, shares, amount);
-    addTransaction("Bought crypto", `${stock.name} (${stock.symbol})`, `- ${peso.format(amount)}`);
+    state.stockHoldings[stock.symbol] = Number((Number(state.stockHoldings[stock.symbol] || 0) + units).toFixed(8));
+    addStockTransaction("Bought", stock, units, amount);
+    addTransaction(`Bought ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol})`, `- ${peso.format(amount)}`);
   } else {
     const ownedShares = Number(state.stockHoldings[stock.symbol] || 0);
-    const sellShares = Number((amount / stock.price).toFixed(4));
-    if (!ownedShares) return toast("You do not own this coin yet");
-    if (sellShares > ownedShares + 0.0001) return toast("Not enough coins to sell");
-    state.stockHoldings[stock.symbol] = Number((ownedShares - sellShares).toFixed(4));
+    const sellUnits = Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
+    if (!ownedShares) return toast(`You do not own this ${assetClassLabel(stock)} yet`);
+    if (sellUnits > ownedShares + 0.00000001) return toast(`Not enough ${assetActionCopy(stock)} to sell`);
+    state.stockHoldings[stock.symbol] = Number((ownedShares - sellUnits).toFixed(8));
     state.wallet += amount;
-    addStockTransaction("Sold", stock, sellShares, amount);
-    addTransaction("Sold crypto", `${stock.name} (${stock.symbol})`, `+ ${peso.format(amount)}`);
+    addStockTransaction("Sold", stock, sellUnits, amount);
+    addTransaction(`Sold ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol})`, `+ ${peso.format(amount)}`);
   }
 
   saveState();
   openView("stocks");
   toast(`${side === "buy" ? "Bought" : "Sold"} ${stock.symbol}`);
+}
+
+function updateTradeEstimate(value, symbol) {
+  const asset = stockBySymbol(symbol);
+  const amount = Number(value || 0);
+  const units = amount > 0 ? amount / asset.price : 0;
+  const precision = asset.type === "stock" ? 4 : 8;
+  const el = document.querySelector("#tradeEstimate");
+  if (el) el.textContent = `${units.toFixed(precision)} ${asset.symbol}`;
 }
 
 function stockTrendSvg(stock) {
@@ -2175,35 +2352,42 @@ function renderStocksComplete() {
 function renderStocksDashboard() {
   const total = stockPortfolioValue();
   const holdingCount = Object.values(state.stockHoldings || {}).filter(Number).length;
+  const lastUpdated = state.marketLastUpdated ? `Updated ${formatClock(state.marketLastUpdated)}` : "Fetching live prices...";
   return `
     <section class="stocks-page">
       <div class="statusbar"><span>14:18</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
       <header class="stocks-titlebar">
         <button class="stocks-back" onclick="openView('home')" aria-label="Back">‹</button>
-        <h2>Crypto</h2>
-        <button onclick="toast('Crypto help opened')" type="button">?</button>
+        <h2>Wealth</h2>
+        <button onclick="refreshMarketPrices()" type="button">↻</button>
       </header>
       <section class="stocks-balance-card">
-        <span>Total crypto balance</span>
+        <span>Total investment balance</span>
         <strong>${money(total)}</strong>
+        <small>${lastUpdated}</small>
       </section>
       <div class="stocks-actions">
         <button onclick="openStockTrade('BTC', 'buy')" type="button">+ Buy</button>
         <button onclick="openStockTrade('BTC', 'sell')" type="button">- Sell</button>
       </div>
-      <div class="stocks-section-head"><b>MY PORTFOLIO</b><span>${holdingCount} coins</span></div>
+      <div class="stocks-section-head"><b>MY PORTFOLIO</b><span>${holdingCount} assets</span></div>
       ${holdingCount ? renderStockPortfolioRows() : `
         <section class="stocks-explore-card">
-          <h2>Explore crypto</h2>
-          <p>Get started with buying your first ever crypto</p>
+          <h2>Explore assets</h2>
+          <p>Start with Bitcoin or NVIDIA using your Maya Wallet balance.</p>
           <button onclick="openStockDetail('BTC')" type="button">Buy your first crypto</button>
         </section>
       `}
       <button class="stocks-history-btn" onclick="openView('stockHistory')" type="button">☰ History</button>
-      <h3 class="stocks-kicker">ALL CRYPTO</h3>
-      <p class="stocks-subtitle">Percentage changes reflect sample price movements over the past 24 hours.</p>
+      <h3 class="stocks-kicker">AVAILABLE ASSETS</h3>
+      <p class="stocks-subtitle">Live prices are fetched from public market APIs and shown in PHP.</p>
+      <h3 class="stocks-kicker">CRYPTO</h3>
       <section class="stocks-grid">
-        ${stocksCatalog.map((stock) => renderStockCard(stock)).join("")}
+        ${stocksCatalog.filter((asset) => asset.type === "crypto").map((asset) => renderStockCard(stockBySymbol(asset.symbol))).join("")}
+      </section>
+      <h3 class="stocks-kicker asset-group-title">STOCKS</h3>
+      <section class="stocks-grid">
+        ${stocksCatalog.filter((asset) => asset.type === "stock").map((asset) => renderStockCard(stockBySymbol(asset.symbol))).join("")}
       </section>
     </section>
   `;
@@ -2212,11 +2396,12 @@ function renderStocksDashboard() {
 function renderStockPortfolioRows() {
   return `
     <section class="stocks-list-card">
-      ${stocksCatalog.filter((stock) => Number(state.stockHoldings?.[stock.symbol] || 0) > 0).map((stock) => {
+      ${stocksCatalog.filter((asset) => Number(state.stockHoldings?.[asset.symbol] || 0) > 0).map((asset) => {
+        const stock = stockBySymbol(asset.symbol);
         const shares = Number(state.stockHoldings[stock.symbol] || 0);
         return `
           <button class="stocks-portfolio-row" onclick="openStockDetail('${stock.symbol}')" type="button">
-            <span><b>${stock.symbol}</b><small>${shares.toFixed(4)} coins</small></span>
+            <span><b>${stock.symbol}</b><small>${shares.toFixed(stock.type === "stock" ? 4 : 8)} ${assetUnit(stock, shares)}</small></span>
             <strong>${money(shares * stock.price)}</strong>
           </button>
         `;
@@ -2230,7 +2415,7 @@ function renderStockCard(stock) {
   return `
     <button class="stock-card" onclick="openStockDetail('${stock.symbol}')" type="button">
       <span class="stock-logo" style="background:${stock.color}">${stock.symbol[0]}</span>
-      <b>${stock.symbol}</b>
+      <b>${stock.symbol} · ${stock.type.toUpperCase()}</b>
       <h3>${stock.name}</h3>
       <strong>${peso.format(stock.price)}</strong>
       <span class="stock-change ${positive ? "up" : "down"}">${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%</span>
@@ -2242,6 +2427,7 @@ function renderStockDetail() {
   const stock = stockBySymbol(state.selectedStock);
   const shares = Number(state.stockHoldings?.[stock.symbol] || 0);
   const positive = stock.change >= 0;
+  const unitsText = assetUnit(stock, shares);
   return `
     <section class="stocks-page">
       <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
@@ -2252,7 +2438,7 @@ function renderStockDetail() {
       <div class="stock-price">${peso.format(stock.price)}</div>
       <div class="stock-price-row">
         <span class="stock-change ${positive ? "up" : "down"}">${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%</span>
-        <span>${positive ? "+" : "-"} ${peso.format(stock.price * Math.abs(stock.change) / 100)}</span>
+        <span>${positive ? "+" : "-"} ${peso.format(stock.price * Math.abs(stock.change) / 100)} · ${stock.source}</span>
       </div>
       ${stockTrendSvg(stock)}
       <section class="stocks-risk-card stock-about">
@@ -2263,7 +2449,7 @@ function renderStockDetail() {
       <section class="market-stats">
         <div><b>DAY LOW</b><strong>${peso.format(stock.price * 0.97)}</strong></div>
         <div class="green"><b>DAY HIGH</b><strong>${peso.format(stock.price * 1.04)}</strong></div>
-        <div><b>OWNED</b><strong>${shares.toFixed(4)}</strong></div>
+        <div><b>OWNED</b><strong>${shares.toFixed(stock.type === "stock" ? 4 : 8)} ${unitsText}</strong></div>
         <div class="green"><b>VALUE</b><strong>${peso.format(shares * stock.price)}</strong></div>
       </section>
       <div class="stocks-actions sticky">
@@ -2279,6 +2465,7 @@ function renderStockTrade() {
   const side = state.stockTradeSide || "buy";
   const owned = Number(state.stockHoldings?.[stock.symbol] || 0);
   const ownedValue = owned * stock.price;
+  const unitPrecision = stock.type === "stock" ? 4 : 8;
   return `
     <section class="stocks-page">
       <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
@@ -2292,12 +2479,17 @@ function renderStockTrade() {
           <strong>${money(state.wallet)}</strong>
           <label>
             <span>${side === "buy" ? "Spend" : "Receive"}</span>
-            <input name="amount" inputmode="decimal" type="number" min="1" step="0.01" placeholder="0.00" autofocus />
+            <input name="amount" inputmode="decimal" type="number" min="1" step="0.01" placeholder="0.00" oninput="updateTradeEstimate(this.value, '${stock.symbol}')" autofocus />
           </label>
         </section>
+        <div class="trade-down-arrow">↓</div>
         <section class="trade-account-card">
           <div><span class="stock-logo" style="background:${stock.color}">${stock.symbol[0]}</span><b>${stock.name}</b><button type="button" onclick="openView('stocks')">Change</button></div>
-          <p class="muted">Estimated coins use ${peso.format(stock.price)} per coin. You own ${owned.toFixed(4)} coins (${peso.format(ownedValue)}).</p>
+          <div class="trade-estimate">
+            <span>Get (estimate)</span>
+            <strong id="tradeEstimate">0 ${stock.symbol}</strong>
+          </div>
+          <p class="muted">${stock.type === "stock" ? "Stock orders use the latest available quote and are simulated for this prototype." : "Crypto orders use the latest available quote and are simulated for this prototype."} Price: ${peso.format(stock.price)} per ${stock.unitSingular}. You own ${owned.toFixed(unitPrecision)} ${assetUnit(stock, owned)} (${peso.format(ownedValue)}).</p>
         </section>
         <button class="stocks-bottom-btn" type="submit">${side === "buy" ? "Buy" : "Sell"} ${stock.symbol}</button>
       </form>
@@ -2318,7 +2510,7 @@ function renderStockHistory() {
         <section class="stocks-list-card">
           ${state.stockTransactions.map((tx) => `
             <div class="stocks-portfolio-row">
-              <span><b>${escapeHTML(tx.side)} ${escapeHTML(tx.symbol)}</b><small>${escapeHTML(formatTransactionDateTime(tx))} · ${Number(tx.shares).toFixed(4)} coins</small></span>
+              <span><b>${escapeHTML(tx.side)} ${escapeHTML(tx.symbol)}</b><small>${escapeHTML(formatTransactionDateTime(tx))} · ${Number(tx.shares).toFixed(tx.type === "stock" ? 4 : 8)} ${escapeHTML(tx.unitLabel || "units")}</small></span>
               <strong>${peso.format(Number(tx.amount || 0))}</strong>
             </div>
           `).join("")}
@@ -2393,11 +2585,15 @@ function render() {
   }
 
   if (!session?.user) {
+    stopMarketTracking();
     app.innerHTML = renderLogin();
     return;
   }
 
   let content = "";
+  const marketViews = ["stocks", "stockDetail", "stockTrade", "stockHistory"];
+  if (marketViews.includes(state.view)) startMarketTracking();
+  else stopMarketTracking();
   if (state.view === "profile") {
     app.innerHTML = renderProfile();
     return;

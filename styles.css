@@ -537,6 +537,10 @@ button {
   font-weight: 950;
 }
 
+.asset-group-title {
+  margin-top: 26px;
+}
+
 .stocks-risk-card h2 {
   margin: 12px 0;
   font-size: 26px;
@@ -569,6 +573,13 @@ button {
   font-size: 48px;
   line-height: 1;
   font-weight: 950;
+}
+
+.stocks-balance-card small {
+  display: block;
+  margin-top: 12px;
+  color: #8d8f93;
+  font-weight: 800;
 }
 
 .stocks-actions {
@@ -784,6 +795,20 @@ button {
   border-bottom: 1px solid #18191b;
 }
 
+.trade-down-arrow {
+  width: 54px;
+  height: 54px;
+  margin: -34px auto -34px;
+  border-radius: 50%;
+  background: #000;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  position: relative;
+  z-index: 2;
+}
+
 .trade-account-card > div strong,
 .trade-account-card > div b {
   flex: 1;
@@ -807,6 +832,19 @@ button {
   gap: 8px;
   padding: 22px 18px;
   color: #2bd388;
+}
+
+.trade-estimate {
+  padding: 20px 18px 4px;
+  display: grid;
+  gap: 8px;
+  color: #a3a4a8;
+}
+
+.trade-estimate strong {
+  color: #fff;
+  font-size: 34px;
+  line-height: 1;
 }
 
 .trade-account-card input {
