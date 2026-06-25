@@ -288,6 +288,8 @@ button {
 }
 
 .service {
+  border: 0;
+  background: transparent;
   text-align: center;
   color: var(--muted);
   font-weight: 800;
@@ -335,6 +337,505 @@ button {
 .promo strong {
   color: #27ef8b;
   font-size: 33px;
+}
+
+.stocks-promo {
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stocks-promo h3 {
+  margin: 4px 0;
+  font-size: 21px;
+}
+
+.stocks-promo p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.stocks-page {
+  margin: -14px -20px 0;
+  min-height: 100vh;
+  height: 100vh;
+  padding: 14px 26px 118px;
+  background: #151617;
+  color: #fff;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.stocks-page .statusbar {
+  color: #fff;
+}
+
+.stocks-titlebar,
+.stocks-flow-head,
+.stocks-actions,
+.stocks-section-head,
+.history-filter-row {
+  display: flex;
+  align-items: center;
+}
+
+.stocks-titlebar {
+  justify-content: space-between;
+  padding: 26px 0 28px;
+}
+
+.stocks-titlebar.left {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.stocks-titlebar h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.stocks-titlebar h2 span {
+  color: #8d8f93;
+  font-weight: 700;
+}
+
+.stocks-titlebar button,
+.stocks-back {
+  background: transparent;
+  color: #fff;
+}
+
+.stocks-back {
+  font-size: 44px;
+  line-height: 1;
+  padding: 0;
+}
+
+.stocks-flow-head {
+  gap: 18px;
+  padding: 28px 0 50px;
+}
+
+.stocks-progress {
+  flex: 1;
+  height: 2px;
+  background: #5a5b5e;
+}
+
+.stocks-progress span {
+  display: block;
+  height: 100%;
+  background: #fff;
+}
+
+.stocks-page h1 {
+  margin: 0 0 28px;
+  font-size: 36px;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.stocks-subtitle {
+  color: #a3a4a8;
+  font-size: 18px;
+  line-height: 1.45;
+  margin: -8px 0 28px;
+}
+
+.stocks-choice-list {
+  display: grid;
+  gap: 16px;
+}
+
+.stocks-choice {
+  min-height: 70px;
+  width: 100%;
+  padding: 18px 20px;
+  border-radius: 20px;
+  background: #282a2e;
+  color: #fff;
+  text-align: left;
+  font-size: 20px;
+  font-weight: 850;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.stocks-choice.selected {
+  background: #172d22;
+  box-shadow: inset 0 0 0 2px #2bd388;
+}
+
+.stocks-check {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 2px solid #585a5f;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #2bd388;
+}
+
+.stocks-bottom-btn {
+  position: fixed;
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  width: min(calc(100% - 52px), 378px);
+  min-height: 68px;
+  border-radius: 20px;
+  background: #2bd388;
+  color: #03140b;
+  font-size: 23px;
+  font-weight: 950;
+  z-index: 12;
+}
+
+.stocks-bottom-btn.disabled,
+.stocks-bottom-btn:disabled {
+  background: #1f6f49;
+  cursor: not-allowed;
+}
+
+.stocks-success-mark {
+  width: 126px;
+  height: 126px;
+  margin: 145px 0 60px 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, #12b965, #66f0a9);
+  color: #dfffea;
+  font-size: 76px;
+  font-weight: 900;
+  box-shadow: 12px 12px 0 #06783f;
+}
+
+.stocks-risk-card,
+.stocks-balance-card,
+.stocks-explore-card,
+.stock-card,
+.stocks-list-card,
+.trade-account-card {
+  border-radius: 22px;
+  background: #24262a;
+}
+
+.stocks-risk-card {
+  padding: 24px 20px;
+  margin: 36px 0;
+}
+
+.stocks-risk-card small,
+.stocks-kicker {
+  color: #a3a4a8;
+  letter-spacing: 1.8px;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.stocks-risk-card h2 {
+  margin: 12px 0;
+  font-size: 26px;
+}
+
+.stocks-risk-card p {
+  color: #a3a4a8;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.stocks-risk-card button,
+.history-filter-row button,
+.stock-about button {
+  background: transparent;
+  color: #2bd388;
+  font-weight: 900;
+}
+
+.stocks-balance-card {
+  padding: 24px 20px;
+  color: #a3a4a8;
+}
+
+.stocks-balance-card strong,
+.stock-price {
+  display: block;
+  margin-top: 10px;
+  color: #fff;
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.stocks-actions {
+  gap: 18px;
+  margin: 24px 0 34px;
+}
+
+.stocks-actions button {
+  flex: 1;
+  min-height: 62px;
+  border-radius: 999px;
+  background: #2bd388;
+  color: #03140b;
+  font-size: 24px;
+  font-weight: 950;
+}
+
+.stocks-actions button + button {
+  background: #17683f;
+}
+
+.stocks-section-head,
+.history-filter-row {
+  justify-content: space-between;
+  margin: 0 0 18px;
+  color: #c4c5c8;
+}
+
+.stocks-explore-card {
+  padding: 24px 18px;
+  margin-bottom: 28px;
+  background: linear-gradient(135deg, #00231c, #2351b7 48%, #78349b);
+}
+
+.stocks-explore-card h2 {
+  margin: 0 0 8px;
+  font-size: 30px;
+}
+
+.stocks-explore-card p {
+  margin: 0 0 18px;
+  font-size: 18px;
+}
+
+.stocks-explore-card button,
+.stocks-history-btn {
+  width: 100%;
+  min-height: 58px;
+  border-radius: 18px;
+  background: #000;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 950;
+}
+
+.stocks-history-btn {
+  margin-bottom: 34px;
+  background: #3a3c40;
+}
+
+.stocks-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.stock-card {
+  min-height: 178px;
+  padding: 18px 14px;
+  color: #fff;
+  text-align: left;
+}
+
+.stock-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  margin-right: 8px;
+  color: #fff;
+  font-weight: 950;
+}
+
+.stock-card b {
+  color: #9b9da1;
+  font-size: 20px;
+}
+
+.stock-card h3 {
+  min-height: 48px;
+  margin: 18px 0 16px;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.stock-card strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 19px;
+}
+
+.stock-change {
+  display: inline-block;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-weight: 900;
+}
+
+.stock-change.up {
+  color: #2bd388;
+  background: #173523;
+}
+
+.stock-change.down {
+  color: #ff7c85;
+  background: #553133;
+}
+
+.stock-price-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  color: #ff7c85;
+  font-size: 20px;
+  margin: 12px 0 22px;
+}
+
+.stock-chart {
+  width: calc(100% + 52px);
+  margin: 10px -26px 30px;
+  height: 175px;
+}
+
+.stock-about > div {
+  display: flex;
+  align-items: center;
+}
+
+.market-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin: 16px 0 34px;
+}
+
+.market-stats div {
+  min-height: 112px;
+  padding: 18px 12px;
+  border-radius: 16px;
+  background: #3a2025;
+  color: #d3c8cb;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.market-stats div.green {
+  background: #173526;
+}
+
+.market-stats strong {
+  color: #fff;
+  font-size: 20px;
+}
+
+.stocks-actions.sticky {
+  position: sticky;
+  bottom: 20px;
+}
+
+.stocks-list-card {
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.stocks-portfolio-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  background: transparent;
+  color: #fff;
+  text-align: left;
+  border-bottom: 1px solid #34363b;
+}
+
+.stocks-portfolio-row:last-child {
+  border-bottom: 0;
+}
+
+.stocks-portfolio-row small {
+  display: block;
+  color: #a3a4a8;
+  margin-top: 5px;
+}
+
+.stock-trade-form {
+  display: grid;
+  gap: 22px;
+}
+
+.trade-account-card {
+  overflow: hidden;
+}
+
+.trade-account-card > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 18px;
+  border-bottom: 1px solid #18191b;
+}
+
+.trade-account-card > div strong,
+.trade-account-card > div b {
+  flex: 1;
+  font-size: 23px;
+}
+
+.trade-maya-logo {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #000;
+  color: #2bd388;
+  font-size: 32px;
+  font-weight: 950;
+}
+
+.trade-account-card label {
+  display: grid;
+  gap: 8px;
+  padding: 22px 18px;
+  color: #2bd388;
+}
+
+.trade-account-card input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 38px;
+  font-weight: 950;
+  outline: 0;
+}
+
+.trade-account-card p {
+  padding: 0 18px 22px;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.stock-empty-history {
+  min-height: 58vh;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  color: #a3a4a8;
+}
+
+.stock-empty-history h2 {
+  color: #fff;
+  margin: 18px 0 6px;
 }
 
 .section-title {

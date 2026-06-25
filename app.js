@@ -57,7 +57,11 @@ const defaultState = {
     monthlyIncome: "",
     employmentType: ""
   },
-  activeLoan: null // Stores running details once application completes
+  activeLoan: null, // Stores running details once application completes
+  stocksProfileComplete: false,
+  stocksFlow: null,
+  stockHoldings: {},
+  stockTransactions: []
   // ───────────────────────────────────────────────────────────────────
 
 };
@@ -69,6 +73,70 @@ let authMode = "signin";
 let authSubmitting = false;
 const app = document.querySelector("#app");
 const modalRoot = document.querySelector("#modalRoot");
+
+const stocksCatalog = [
+  { symbol: "BTC", name: "Bitcoin", price: 3785577.87, change: -2.03, color: "#f7931a", about: "Bitcoin is considered to be the first cryptocurrency. It is a peer-to-peer online currency whose transactions happen directly between equal participants." },
+  { symbol: "PAXG", name: "PAX Gold", price: 243887.91, change: -2.64, color: "#d8c21f", about: "PAX Gold is a crypto asset backed by physical gold, designed to track the value of one fine troy ounce of gold." },
+  { symbol: "YFI", name: "Yearn Finance", price: 105281.61, change: -2.27, color: "#0878df", about: "Yearn Finance is a decentralized finance protocol that helps users access automated yield strategies." },
+  { symbol: "ETH", name: "Ethereum", price: 101100.00, change: -1.73, color: "#627eea", about: "Ethereum is a blockchain platform used for smart contracts, decentralized apps, and digital assets." },
+  { symbol: "BNB", name: "BNB", price: 35075.87, change: -1.56, color: "#f3ba2f", about: "BNB is a crypto asset used across the BNB Chain ecosystem and related exchange services." },
+  { symbol: "AAVE", name: "Aave", price: 5095.25, change: 15.47, color: "#7b79ff", about: "Aave is a decentralized liquidity protocol where users can supply, borrow, and manage crypto assets." },
+];
+
+const stocksQuestions = [
+  {
+    title: "What is your approximate net worth?",
+    choices: ["Less than PHP 100,000", "PHP 100,000 - 500,000", "PHP 500,001 - 1,000,000", "PHP 1,000,001 - 10,000,000", "More than PHP 10 million"],
+  },
+  {
+    title: "What are you investing for?",
+    choices: ["To preserve the real value of my investments and generate interest income", "To grow my investments with interest income and capital appreciation", "To grow investments through significant capital appreciation"],
+  },
+  {
+    title: "How much do you plan on investing?",
+    choices: ["PHP 1,000 or less", "PHP 1,001 - PHP 50,000", "PHP 50,001 - PHP 100,000", "PHP 100,001 - PHP 500,000", "PHP 500,001 - PHP 1,000,000", "More than PHP 1,000,000"],
+  },
+  {
+    title: "How frequently do you plan to invest?",
+    choices: ["Weekly", "Monthly", "Quarterly", "Yearly", "Only when I have excess cash"],
+  },
+  {
+    title: "How long do you plan to hold your investments?",
+    choices: ["Less than 1 year", "1-3 years", "3-5 years", "More than 5 years"],
+  },
+  {
+    title: "How much loss in your investment can you accept?",
+    choices: ["0%", "Up to 10%", "More than 10%"],
+  },
+  {
+    title: "How much risk are you willing to accept when investing?",
+    choices: ["Low to no risk at all for overall preservation of capital", "Moderate risk for steady and gradual investment returns", "Higher risk for potentially significant investment returns"],
+  },
+  {
+    title: "How much do you know about investing?",
+    choices: ["I have no knowledge about investing", "I have limited knowledge about investing", "I have general knowledge about investing", "I have advanced knowledge about investing"],
+  },
+  {
+    title: "Do you need to withdraw your investments at any given time?",
+    choices: ["I will be regularly withdrawing my investments for liquidity purposes", "I have other sources of funds for my liquidity requirements"],
+  },
+  {
+    title: "What is your monthly disposable income?",
+    choices: ["Less than PHP 25,000", "PHP 25,001 - 100,000", "PHP 100,001 - 500,000", "PHP 500,001 - 1,000,000", "More than PHP 1,000,000"],
+  },
+  {
+    title: "Which of the following have you invested in?",
+    subtitle: "Select up to 3 choices that apply",
+    multi: true,
+    choices: ["I have not invested in any product", "Time deposits or Savings accounts", "Treasury Bills", "Government or Corporate Bonds", "UITFs or Mutual Funds", "Foreign Exchange Currencies", "Commodities", "Derivatives", "Stock Investments or Equities", "Cryptocurrencies"],
+  },
+  {
+    title: "What are the sources of your investment funds?",
+    subtitle: "Select up to 3 choices that apply",
+    multi: true,
+    choices: ["Savings", "Salary or Business Income", "Pension", "Inheritance", "Allowances", "Investments"],
+  },
+];
 
 function cloneDefaultState() {
   return typeof structuredClone === "function"
@@ -470,7 +538,7 @@ function formatTransactionDateTime(tx) {
 function icon(name) {
   const icons = {
     user: "♙", bell: "♧", eye: "◉", in: "↙", out: "↗", bank: "▥", ticket: "◉",
-    crypto: "◈", hand: "♬", phone: "▯", bills: "▣", shop: "▰", more: "•••",
+    crypto: "◈", stocks: "▥", hand: "♬", phone: "▯", bills: "▣", shop: "▰", more: "•••",
     home: "m", scan: "⌗", grid: "▦", help: "?", chevron: "›", account: "♙",
     heart: "♡", copy: "▢"
   };
@@ -523,6 +591,33 @@ function balanceCard({ amount, label, actions, extra = "" }) {
   `;
 }
 
+function walletServicesGrid() {
+  const services = [
+    { label: "Bank<br>transfer", icon: "bank", action: "toast('Bank transfer opened')" },
+    { label: "Raffle<br>Promo", icon: "stocks", action: "toast('Raffle Promo opened')" },
+    { label: "Crypto", icon: "crypto", action: "openStocks()" },
+    { label: "Refer<br>& Earn", icon: "hand", action: "toast('Refer and Earn opened')", badge: "Win P2K" },
+    { label: "Load", icon: "phone", action: "toast('Load opened')" },
+    { label: "Bills", icon: "bills", action: "toast('Bills opened')" },
+    { label: "Shop", icon: "shop", action: "toast('Shop opened')" },
+    { label: "More", icon: "more", action: "toast('More services opened')" },
+  ];
+
+  return `
+    <section class="quick-grid" aria-label="Wallet services">
+      ${services.map((service) => `
+        <button class="service" onclick="${service.action}" type="button">
+          <span class="service-icon">
+            ${service.badge ? `<span class="badge-red">${service.badge}</span>` : ""}
+            ${icon(service.icon)}
+          </span>
+          <span>${service.label}</span>
+        </button>
+      `).join("")}
+    </section>
+  `;
+}
+
 function renderWallet() {
   // Calculate if any loan capital is actively sitting in the wallet
   let loanCapitalInWallet = 0;
@@ -562,6 +657,7 @@ function renderWallet() {
       </section>
     ` : ""}
     
+    ${walletServicesGrid()}
     ${transactionsPanel()}
   `;
 }
@@ -1529,6 +1625,12 @@ function resetAccount() {
   };
   state.activeLoan = null;
   state.loanView = "home";
+  state.stocksProfileComplete = false;
+  state.stocksFlow = null;
+  state.stockHoldings = {};
+  state.stockTransactions = [];
+  state.selectedStock = null;
+  state.stockTradeSide = null;
   state.hidden = false;
   state.tab = "wallet";
   state.view = "home";
@@ -1884,6 +1986,354 @@ function submitMoney(kind) {
   toast(kind === "send" ? `${peso.format(amount)} simulated send recorded` : `${peso.format(amount)} processed`);
 }
 
+function stockBySymbol(symbol) {
+  return stocksCatalog.find((stock) => stock.symbol === symbol) || stocksCatalog[0];
+}
+
+function stockPortfolioValue() {
+  return stocksCatalog.reduce((total, stock) => total + (Number(state.stockHoldings?.[stock.symbol] || 0) * stock.price), 0);
+}
+
+function openStocks() {
+  if (state.stocksProfileComplete) {
+    setState({ view: "stocks" });
+    return;
+  }
+  state.stocksFlow = { step: 1, answers: {} };
+  setState({ view: "stocksQuiz" });
+}
+
+function resetStocksFlow() {
+  state.stocksFlow = null;
+  setState({ view: "home" });
+}
+
+function selectStocksAnswer(step, choice) {
+  const question = stocksQuestions[step - 1];
+  const answers = { ...(state.stocksFlow?.answers || {}) };
+  if (question.multi) {
+    const current = new Set(answers[step] || []);
+    if (current.has(choice)) {
+      current.delete(choice);
+    } else if (current.size < 3) {
+      current.add(choice);
+    } else {
+      toast("Select up to 3 choices");
+    }
+    answers[step] = [...current];
+  } else {
+    answers[step] = choice;
+  }
+  state.stocksFlow = { ...(state.stocksFlow || { step }), answers };
+  saveState();
+  render();
+}
+
+function continueStocksQuiz() {
+  const flow = state.stocksFlow || { step: 1, answers: {} };
+  const answer = flow.answers?.[flow.step];
+  if (!answer || (Array.isArray(answer) && !answer.length)) return toast("Choose an answer to continue");
+  if (flow.step >= stocksQuestions.length) {
+    state.stocksProfileComplete = true;
+    state.stocksFlow = null;
+    saveState();
+    openView("stocksComplete");
+    return;
+  }
+  state.stocksFlow = { ...flow, step: flow.step + 1 };
+  saveState();
+  render();
+}
+
+function stocksQuizBack() {
+  const flow = state.stocksFlow;
+  if (!flow || flow.step === 1) return resetStocksFlow();
+  state.stocksFlow = { ...flow, step: flow.step - 1 };
+  saveState();
+  render();
+}
+
+function openStockDetail(symbol) {
+  state.selectedStock = symbol;
+  setState({ view: "stockDetail" });
+}
+
+function openStockTrade(symbol, side) {
+  state.selectedStock = symbol;
+  state.stockTradeSide = side;
+  setState({ view: "stockTrade" });
+}
+
+function addStockTransaction(side, stock, shares, amount) {
+  state.stockTransactions.unshift({
+    side,
+    symbol: stock.symbol,
+    name: stock.name,
+    shares,
+    amount,
+    createdAt: new Date().toISOString(),
+  });
+  state.stockTransactions = state.stockTransactions.slice(0, 20);
+}
+
+function submitStockTrade(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const stock = stockBySymbol(state.selectedStock);
+  const side = state.stockTradeSide || "buy";
+  const amount = Number(form.amount.value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return toast("Enter a valid amount");
+
+  const shares = Number((amount / stock.price).toFixed(4));
+  if (side === "buy") {
+    if (amount > state.wallet) return toast("Insufficient wallet balance");
+    state.wallet -= amount;
+    state.stockHoldings[stock.symbol] = Number((Number(state.stockHoldings[stock.symbol] || 0) + shares).toFixed(4));
+    addStockTransaction("Bought", stock, shares, amount);
+    addTransaction("Bought crypto", `${stock.name} (${stock.symbol})`, `- ${peso.format(amount)}`);
+  } else {
+    const ownedShares = Number(state.stockHoldings[stock.symbol] || 0);
+    const sellShares = Number((amount / stock.price).toFixed(4));
+    if (!ownedShares) return toast("You do not own this coin yet");
+    if (sellShares > ownedShares + 0.0001) return toast("Not enough coins to sell");
+    state.stockHoldings[stock.symbol] = Number((ownedShares - sellShares).toFixed(4));
+    state.wallet += amount;
+    addStockTransaction("Sold", stock, sellShares, amount);
+    addTransaction("Sold crypto", `${stock.name} (${stock.symbol})`, `+ ${peso.format(amount)}`);
+  }
+
+  saveState();
+  openView("stocks");
+  toast(`${side === "buy" ? "Bought" : "Sold"} ${stock.symbol}`);
+}
+
+function stockTrendSvg(stock) {
+  const isUp = stock.change >= 0;
+  const color = isUp ? "#2ecb80" : "#ff6b75";
+  const fill = isUp ? "rgba(46, 203, 128, 0.18)" : "rgba(255, 107, 117, 0.2)";
+  const points = isUp
+    ? "0,92 38,76 74,80 110,55 148,62 186,38 224,46 260,22 300,30 340,12"
+    : "0,24 38,36 74,28 110,52 148,48 186,78 224,92 260,66 300,72 340,58";
+  return `
+    <svg class="stock-chart" viewBox="0 0 340 110" role="img" aria-label="${stock.symbol} price chart">
+      <polyline points="${points} 340,110 0,110" fill="${fill}" stroke="none"></polyline>
+      <polyline points="${points}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+      <line x1="0" y1="58" x2="340" y2="58" stroke="rgba(255,255,255,.45)" stroke-width="2" stroke-dasharray="8 10"></line>
+    </svg>
+  `;
+}
+
+function renderStocksQuiz() {
+  const flow = state.stocksFlow || { step: 1, answers: {} };
+  const question = stocksQuestions[flow.step - 1];
+  const selected = flow.answers?.[flow.step];
+  const hasAnswer = Array.isArray(selected) ? selected.length : Boolean(selected);
+  return `
+    <section class="stocks-page stocks-quiz">
+      <div class="statusbar"><span>14:17</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
+      <div class="stocks-flow-head">
+        <button class="stocks-back" onclick="stocksQuizBack()" aria-label="Back">‹</button>
+        <div class="stocks-progress"><span style="width:${(flow.step / stocksQuestions.length) * 100}%"></span></div>
+        <b>${flow.step}/${stocksQuestions.length}</b>
+      </div>
+      <h1>${question.title}</h1>
+      ${question.subtitle ? `<p class="stocks-subtitle">${question.subtitle}</p>` : ""}
+      <div class="stocks-choice-list">
+        ${question.choices.map((choice) => {
+          const active = Array.isArray(selected) ? selected.includes(choice) : selected === choice;
+          return `
+            <button class="stocks-choice ${active ? "selected" : ""}" onclick="selectStocksAnswer(${flow.step}, '${escapeHTML(choice).replaceAll("'", "\\'")}')" type="button">
+              <span>${escapeHTML(choice)}</span>
+              ${question.multi ? `<span class="stocks-check">${active ? "✓" : ""}</span>` : ""}
+            </button>
+          `;
+        }).join("")}
+      </div>
+      <button class="stocks-bottom-btn ${hasAnswer ? "" : "disabled"}" onclick="continueStocksQuiz()" ${hasAnswer ? "" : "disabled"}>Continue</button>
+    </section>
+  `;
+}
+
+function renderStocksComplete() {
+  return `
+    <section class="stocks-page">
+      <div class="statusbar"><span>14:18</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
+      <div class="stocks-success-mark">✓</div>
+      <h1>Your investor profile is all set up!</h1>
+      <p class="stocks-subtitle">You can now buy, sell, send, and receive crypto. Explore valuable insights about different risk profiles below.</p>
+      <section class="stocks-risk-card">
+        <small>YOUR RISK PROFILE</small>
+        <h2>Conservative</h2>
+        <p>Prefers minimal risk and prioritizes capital preservation.</p>
+        <button onclick="toast('Risk profile details opened')" type="button">Learn more</button>
+      </section>
+      <button class="stocks-bottom-btn" onclick="openView('stocks')">Continue</button>
+    </section>
+  `;
+}
+
+function renderStocksDashboard() {
+  const total = stockPortfolioValue();
+  const holdingCount = Object.values(state.stockHoldings || {}).filter(Number).length;
+  return `
+    <section class="stocks-page">
+      <div class="statusbar"><span>14:18</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
+      <header class="stocks-titlebar">
+        <button class="stocks-back" onclick="openView('home')" aria-label="Back">‹</button>
+        <h2>Crypto</h2>
+        <button onclick="toast('Crypto help opened')" type="button">?</button>
+      </header>
+      <section class="stocks-balance-card">
+        <span>Total crypto balance</span>
+        <strong>${money(total)}</strong>
+      </section>
+      <div class="stocks-actions">
+        <button onclick="openStockTrade('BTC', 'buy')" type="button">+ Buy</button>
+        <button onclick="openStockTrade('BTC', 'sell')" type="button">- Sell</button>
+      </div>
+      <div class="stocks-section-head"><b>MY PORTFOLIO</b><span>${holdingCount} coins</span></div>
+      ${holdingCount ? renderStockPortfolioRows() : `
+        <section class="stocks-explore-card">
+          <h2>Explore crypto</h2>
+          <p>Get started with buying your first ever crypto</p>
+          <button onclick="openStockDetail('BTC')" type="button">Buy your first crypto</button>
+        </section>
+      `}
+      <button class="stocks-history-btn" onclick="openView('stockHistory')" type="button">☰ History</button>
+      <h3 class="stocks-kicker">ALL CRYPTO</h3>
+      <p class="stocks-subtitle">Percentage changes reflect sample price movements over the past 24 hours.</p>
+      <section class="stocks-grid">
+        ${stocksCatalog.map((stock) => renderStockCard(stock)).join("")}
+      </section>
+    </section>
+  `;
+}
+
+function renderStockPortfolioRows() {
+  return `
+    <section class="stocks-list-card">
+      ${stocksCatalog.filter((stock) => Number(state.stockHoldings?.[stock.symbol] || 0) > 0).map((stock) => {
+        const shares = Number(state.stockHoldings[stock.symbol] || 0);
+        return `
+          <button class="stocks-portfolio-row" onclick="openStockDetail('${stock.symbol}')" type="button">
+            <span><b>${stock.symbol}</b><small>${shares.toFixed(4)} coins</small></span>
+            <strong>${money(shares * stock.price)}</strong>
+          </button>
+        `;
+      }).join("")}
+    </section>
+  `;
+}
+
+function renderStockCard(stock) {
+  const positive = stock.change >= 0;
+  return `
+    <button class="stock-card" onclick="openStockDetail('${stock.symbol}')" type="button">
+      <span class="stock-logo" style="background:${stock.color}">${stock.symbol[0]}</span>
+      <b>${stock.symbol}</b>
+      <h3>${stock.name}</h3>
+      <strong>${peso.format(stock.price)}</strong>
+      <span class="stock-change ${positive ? "up" : "down"}">${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%</span>
+    </button>
+  `;
+}
+
+function renderStockDetail() {
+  const stock = stockBySymbol(state.selectedStock);
+  const shares = Number(state.stockHoldings?.[stock.symbol] || 0);
+  const positive = stock.change >= 0;
+  return `
+    <section class="stocks-page">
+      <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
+      <header class="stocks-titlebar left">
+        <button class="stocks-back" onclick="openView('stocks')" aria-label="Back">‹</button>
+        <h2>${stock.name} <span>${stock.symbol}</span></h2>
+      </header>
+      <div class="stock-price">${peso.format(stock.price)}</div>
+      <div class="stock-price-row">
+        <span class="stock-change ${positive ? "up" : "down"}">${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%</span>
+        <span>${positive ? "+" : "-"} ${peso.format(stock.price * Math.abs(stock.change) / 100)}</span>
+      </div>
+      ${stockTrendSvg(stock)}
+      <section class="stocks-risk-card stock-about">
+        <div><span class="stock-logo" style="background:${stock.color}">${stock.symbol[0]}</span><h2>${stock.name} <span>${stock.symbol}</span></h2></div>
+        <p>${stock.about} <button onclick="toast('Read more opened')" type="button">Read more</button></p>
+      </section>
+      <h3 class="stocks-kicker">MARKET STATS</h3>
+      <section class="market-stats">
+        <div><b>DAY LOW</b><strong>${peso.format(stock.price * 0.97)}</strong></div>
+        <div class="green"><b>DAY HIGH</b><strong>${peso.format(stock.price * 1.04)}</strong></div>
+        <div><b>OWNED</b><strong>${shares.toFixed(4)}</strong></div>
+        <div class="green"><b>VALUE</b><strong>${peso.format(shares * stock.price)}</strong></div>
+      </section>
+      <div class="stocks-actions sticky">
+        <button onclick="openStockTrade('${stock.symbol}', 'buy')" type="button">+ Buy</button>
+        <button onclick="openStockTrade('${stock.symbol}', 'sell')" type="button">- Sell</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderStockTrade() {
+  const stock = stockBySymbol(state.selectedStock);
+  const side = state.stockTradeSide || "buy";
+  const owned = Number(state.stockHoldings?.[stock.symbol] || 0);
+  const ownedValue = owned * stock.price;
+  return `
+    <section class="stocks-page">
+      <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
+      <header class="stocks-titlebar left">
+        <button class="stocks-back" onclick="openStockDetail('${stock.symbol}')" aria-label="Back">‹</button>
+        <h2>${side === "buy" ? "Buy" : "Sell"} ${stock.name}</h2>
+      </header>
+      <form class="stock-trade-form" onsubmit="submitStockTrade(event)">
+        <section class="trade-account-card">
+          <div><span class="trade-maya-logo">m</span><b>My Wallet</b></div>
+          <strong>${money(state.wallet)}</strong>
+          <label>
+            <span>${side === "buy" ? "Spend" : "Receive"}</span>
+            <input name="amount" inputmode="decimal" type="number" min="1" step="0.01" placeholder="0.00" autofocus />
+          </label>
+        </section>
+        <section class="trade-account-card">
+          <div><span class="stock-logo" style="background:${stock.color}">${stock.symbol[0]}</span><b>${stock.name}</b><button type="button" onclick="openView('stocks')">Change</button></div>
+          <p class="muted">Estimated coins use ${peso.format(stock.price)} per coin. You own ${owned.toFixed(4)} coins (${peso.format(ownedValue)}).</p>
+        </section>
+        <button class="stocks-bottom-btn" type="submit">${side === "buy" ? "Buy" : "Sell"} ${stock.symbol}</button>
+      </form>
+    </section>
+  `;
+}
+
+function renderStockHistory() {
+  return `
+    <section class="stocks-page">
+      <div class="statusbar"><span>14:18</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
+      <header class="stocks-titlebar left">
+        <button class="stocks-back" onclick="openView('stocks')" aria-label="Back">‹</button>
+        <h2>History</h2>
+      </header>
+      <div class="history-filter-row"><span>All transactions</span><button onclick="toast('Filter opened')" type="button">Filter</button></div>
+      ${state.stockTransactions.length ? `
+        <section class="stocks-list-card">
+          ${state.stockTransactions.map((tx) => `
+            <div class="stocks-portfolio-row">
+              <span><b>${escapeHTML(tx.side)} ${escapeHTML(tx.symbol)}</b><small>${escapeHTML(formatTransactionDateTime(tx))} · ${Number(tx.shares).toFixed(4)} coins</small></span>
+              <strong>${peso.format(Number(tx.amount || 0))}</strong>
+            </div>
+          `).join("")}
+        </section>
+      ` : `
+        <div class="stock-empty-history">
+          <div>□</div>
+          <h2>You have no transactions yet</h2>
+          <p>Buy your first asset and view all your crypto trades here.</p>
+        </div>
+      `}
+    </section>
+  `;
+}
+
 function openGoalSheet() {
   modalRoot.className = "modal-root active";
   modalRoot.setAttribute("aria-hidden", "false");
@@ -1962,6 +2412,30 @@ function render() {
   }
   if (state.view === "depositFlow") {
     app.innerHTML = renderDepositFlow();
+    return;
+  }
+  if (state.view === "stocksQuiz") {
+    app.innerHTML = renderStocksQuiz();
+    return;
+  }
+  if (state.view === "stocksComplete") {
+    app.innerHTML = renderStocksComplete();
+    return;
+  }
+  if (state.view === "stocks") {
+    app.innerHTML = renderStocksDashboard();
+    return;
+  }
+  if (state.view === "stockDetail") {
+    app.innerHTML = renderStockDetail();
+    return;
+  }
+  if (state.view === "stockTrade") {
+    app.innerHTML = renderStockTrade();
+    return;
+  }
+  if (state.view === "stockHistory") {
+    app.innerHTML = renderStockHistory();
     return;
   }
   if (state.tab === "wallet") content = renderWallet();
