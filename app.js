@@ -58,7 +58,7 @@ const defaultState = {
     employmentType: ""
   },
   activeLoan: null, // Stores running details once application completes
-  stocksProfileComplete: false,
+  stocksProfileComplete: true,
   stocksFlow: null,
   stockHoldings: {},
   stockTransactions: [],
@@ -77,6 +77,10 @@ const app = document.querySelector("#app");
 const modalRoot = document.querySelector("#modalRoot");
 let marketTimer = null;
 let marketLoading = false;
+const COINGECKO_MARKET_IDS = {
+  BTC: "bitcoin",
+  NVDA: "nvidia-xstock",
+};
 
 const stocksCatalog = [
   {
@@ -102,63 +106,8 @@ const stocksCatalog = [
     price: 7350.00,
     change: 1.18,
     color: "#76b900",
-    source: "Yahoo Finance",
+    source: "CoinGecko",
     about: "NVIDIA designs graphics processors, accelerated computing platforms, and AI chips used in gaming, data centers, cloud computing, and professional visualization.",
-  },
-];
-
-const stocksQuestions = [
-  {
-    title: "What is your approximate net worth?",
-    choices: ["Less than PHP 100,000", "PHP 100,000 - 500,000", "PHP 500,001 - 1,000,000", "PHP 1,000,001 - 10,000,000", "More than PHP 10 million"],
-  },
-  {
-    title: "What are you investing for?",
-    choices: ["To preserve the real value of my investments and generate interest income", "To grow my investments with interest income and capital appreciation", "To grow investments through significant capital appreciation"],
-  },
-  {
-    title: "How much do you plan on investing?",
-    choices: ["PHP 1,000 or less", "PHP 1,001 - PHP 50,000", "PHP 50,001 - PHP 100,000", "PHP 100,001 - PHP 500,000", "PHP 500,001 - PHP 1,000,000", "More than PHP 1,000,000"],
-  },
-  {
-    title: "How frequently do you plan to invest?",
-    choices: ["Weekly", "Monthly", "Quarterly", "Yearly", "Only when I have excess cash"],
-  },
-  {
-    title: "How long do you plan to hold your investments?",
-    choices: ["Less than 1 year", "1-3 years", "3-5 years", "More than 5 years"],
-  },
-  {
-    title: "How much loss in your investment can you accept?",
-    choices: ["0%", "Up to 10%", "More than 10%"],
-  },
-  {
-    title: "How much risk are you willing to accept when investing?",
-    choices: ["Low to no risk at all for overall preservation of capital", "Moderate risk for steady and gradual investment returns", "Higher risk for potentially significant investment returns"],
-  },
-  {
-    title: "How much do you know about investing?",
-    choices: ["I have no knowledge about investing", "I have limited knowledge about investing", "I have general knowledge about investing", "I have advanced knowledge about investing"],
-  },
-  {
-    title: "Do you need to withdraw your investments at any given time?",
-    choices: ["I will be regularly withdrawing my investments for liquidity purposes", "I have other sources of funds for my liquidity requirements"],
-  },
-  {
-    title: "What is your monthly disposable income?",
-    choices: ["Less than PHP 25,000", "PHP 25,001 - 100,000", "PHP 100,001 - 500,000", "PHP 500,001 - 1,000,000", "More than PHP 1,000,000"],
-  },
-  {
-    title: "Which of the following have you invested in?",
-    subtitle: "Select up to 3 choices that apply",
-    multi: true,
-    choices: ["I have not invested in any product", "Time deposits or Savings accounts", "Treasury Bills", "Government or Corporate Bonds", "UITFs or Mutual Funds", "Foreign Exchange Currencies", "Commodities", "Derivatives", "Stock Investments or Equities", "Cryptocurrencies"],
-  },
-  {
-    title: "What are the sources of your investment funds?",
-    subtitle: "Select up to 3 choices that apply",
-    multi: true,
-    choices: ["Savings", "Salary or Business Income", "Pension", "Inheritance", "Allowances", "Investments"],
   },
 ];
 
@@ -281,6 +230,8 @@ async function loadWalletState(user) {
     return {
       ...cloneDefaultState(),
       ...data.app_state,
+      stocksProfileComplete: true,
+      stocksFlow: null,
       wallet: Number(data.wallet ?? data.app_state.wallet ?? 1000),
       savings: Number(data.savings ?? data.app_state.savings ?? 0),
       timeDeposit: Number(data.time_deposit ?? data.app_state.timeDeposit ?? 0),
@@ -589,58 +540,25 @@ async function fetchJsonWithTimeout(url, options = {}) {
   return JSON.parse(await fetchTextWithTimeout(url, options));
 }
 
-async function fetchUsdPhpRate() {
-  try {
-    const data = await fetchJsonWithTimeout("https://api.frankfurter.app/latest?from=USD&to=PHP");
-    const rate = Number(data?.rates?.PHP);
-    if (Number.isFinite(rate) && rate > 0) return rate;
-  } catch {
-    // Keep the app usable offline or when a quote provider blocks the request.
-  }
-  return 58;
-}
-
-async function fetchBitcoinPrice() {
-  try {
-    const data = await fetchJsonWithTimeout("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=php&include_24hr_change=true");
-    const price = Number(data?.bitcoin?.php);
-    const change = Number(data?.bitcoin?.php_24h_change);
-    if (Number.isFinite(price) && price > 0) {
-      return { price, change: Number.isFinite(change) ? change : 0, source: "CoinGecko" };
-    }
-  } catch {
-    // Binance + FX fallback below.
-  }
-
-  const usdPhp = await fetchUsdPhpRate();
-  const data = await fetchJsonWithTimeout("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT");
-  const usdPrice = Number(data?.lastPrice);
-  const change = Number(data?.priceChangePercent);
-  if (!Number.isFinite(usdPrice) || usdPrice <= 0) throw new Error("BTC price unavailable");
-  return { price: usdPrice * usdPhp, change: Number.isFinite(change) ? change : 0, source: "Binance" };
-}
-
-async function fetchNvidiaPrice() {
-  const usdPhp = await fetchUsdPhpRate();
-  const data = await fetchJsonWithTimeout("https://query1.finance.yahoo.com/v8/finance/chart/NVDA?range=1d&interval=1m");
-  const result = data?.chart?.result?.[0];
-  const meta = result?.meta || {};
-  const usdPrice = Number(meta.regularMarketPrice || meta.previousClose || meta.chartPreviousClose);
-  const previousClose = Number(meta.previousClose || meta.chartPreviousClose);
-  if (!Number.isFinite(usdPrice) || usdPrice <= 0) throw new Error("NVDA price unavailable");
-  const change = Number.isFinite(previousClose) && previousClose > 0 ? ((usdPrice - previousClose) / previousClose) * 100 : 0;
-  return { price: usdPrice * usdPhp, change, source: "Yahoo Finance" };
+async function fetchCoinGeckoMarketPrices() {
+  const ids = Object.values(COINGECKO_MARKET_IDS).join(",");
+  const data = await fetchJsonWithTimeout(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=php&include_24hr_change=true`, { timeout: 4500 });
+  return Object.fromEntries(Object.entries(COINGECKO_MARKET_IDS).map(([symbol, id]) => {
+    const price = Number(data?.[id]?.php);
+    const change = Number(data?.[id]?.php_24h_change);
+    if (!Number.isFinite(price) || price <= 0) throw new Error(`${symbol} price unavailable`);
+    return [symbol, { price, change: Number.isFinite(change) ? change : 0, source: "CoinGecko" }];
+  }));
 }
 
 async function refreshMarketPrices({ silent = false } = {}) {
   if (marketLoading) return;
   marketLoading = true;
   try {
-    const [btc, nvda] = await Promise.allSettled([fetchBitcoinPrice(), fetchNvidiaPrice()]);
-    const next = { ...(state.marketPrices || {}) };
-    if (btc.status === "fulfilled") next.BTC = btc.value;
-    if (nvda.status === "fulfilled") next.NVDA = nvda.value;
-    state.marketPrices = next;
+    state.marketPrices = {
+      ...(state.marketPrices || {}),
+      ...(await fetchCoinGeckoMarketPrices()),
+    };
     state.marketLastUpdated = new Date().toISOString();
     if (["stocks", "stockDetail", "stockTrade", "stockHistory"].includes(state.view)) render();
   } catch {
@@ -653,7 +571,7 @@ async function refreshMarketPrices({ silent = false } = {}) {
 function startMarketTracking() {
   if (marketTimer) return;
   refreshMarketPrices({ silent: true });
-  marketTimer = setInterval(() => refreshMarketPrices({ silent: true }), 30000);
+  marketTimer = setInterval(() => refreshMarketPrices({ silent: true }), 5000);
 }
 
 function stopMarketTracking() {
@@ -1765,7 +1683,7 @@ function resetAccount() {
   };
   state.activeLoan = null;
   state.loanView = "home";
-  state.stocksProfileComplete = false;
+  state.stocksProfileComplete = true;
   state.stocksFlow = null;
   state.stockHoldings = {};
   state.stockTransactions = [];
@@ -2149,62 +2067,9 @@ function stockPortfolioValue() {
 
 function openStocks() {
   startMarketTracking();
-  if (state.stocksProfileComplete) {
-    setState({ view: "stocks" });
-    return;
-  }
-  state.stocksFlow = { step: 1, answers: {} };
-  setState({ view: "stocksQuiz" });
-}
-
-function resetStocksFlow() {
+  state.stocksProfileComplete = true;
   state.stocksFlow = null;
-  setState({ view: "home" });
-}
-
-function selectStocksAnswer(step, choice) {
-  const question = stocksQuestions[step - 1];
-  const answers = { ...(state.stocksFlow?.answers || {}) };
-  if (question.multi) {
-    const current = new Set(answers[step] || []);
-    if (current.has(choice)) {
-      current.delete(choice);
-    } else if (current.size < 3) {
-      current.add(choice);
-    } else {
-      toast("Select up to 3 choices");
-    }
-    answers[step] = [...current];
-  } else {
-    answers[step] = choice;
-  }
-  state.stocksFlow = { ...(state.stocksFlow || { step }), answers };
-  saveState();
-  render();
-}
-
-function continueStocksQuiz() {
-  const flow = state.stocksFlow || { step: 1, answers: {} };
-  const answer = flow.answers?.[flow.step];
-  if (!answer || (Array.isArray(answer) && !answer.length)) return toast("Choose an answer to continue");
-  if (flow.step >= stocksQuestions.length) {
-    state.stocksProfileComplete = true;
-    state.stocksFlow = null;
-    saveState();
-    openView("stocksComplete");
-    return;
-  }
-  state.stocksFlow = { ...flow, step: flow.step + 1 };
-  saveState();
-  render();
-}
-
-function stocksQuizBack() {
-  const flow = state.stocksFlow;
-  if (!flow || flow.step === 1) return resetStocksFlow();
-  state.stocksFlow = { ...flow, step: flow.step - 1 };
-  saveState();
-  render();
+  setState({ view: "stocks" });
 }
 
 function openStockDetail(symbol) {
@@ -2297,55 +2162,6 @@ function stockTrendSvg(stock) {
       <polyline points="${points}" fill="none" stroke="${color}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"></polyline>
       <line x1="0" y1="58" x2="340" y2="58" stroke="rgba(255,255,255,.45)" stroke-width="2" stroke-dasharray="8 10"></line>
     </svg>
-  `;
-}
-
-function renderStocksQuiz() {
-  const flow = state.stocksFlow || { step: 1, answers: {} };
-  const question = stocksQuestions[flow.step - 1];
-  const selected = flow.answers?.[flow.step];
-  const hasAnswer = Array.isArray(selected) ? selected.length : Boolean(selected);
-  return `
-    <section class="stocks-page stocks-quiz">
-      <div class="statusbar"><span>14:17</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
-      <div class="stocks-flow-head">
-        <button class="stocks-back" onclick="stocksQuizBack()" aria-label="Back">‹</button>
-        <div class="stocks-progress"><span style="width:${(flow.step / stocksQuestions.length) * 100}%"></span></div>
-        <b>${flow.step}/${stocksQuestions.length}</b>
-      </div>
-      <h1>${question.title}</h1>
-      ${question.subtitle ? `<p class="stocks-subtitle">${question.subtitle}</p>` : ""}
-      <div class="stocks-choice-list">
-        ${question.choices.map((choice) => {
-          const active = Array.isArray(selected) ? selected.includes(choice) : selected === choice;
-          return `
-            <button class="stocks-choice ${active ? "selected" : ""}" onclick="selectStocksAnswer(${flow.step}, '${escapeHTML(choice).replaceAll("'", "\\'")}')" type="button">
-              <span>${escapeHTML(choice)}</span>
-              ${question.multi ? `<span class="stocks-check">${active ? "✓" : ""}</span>` : ""}
-            </button>
-          `;
-        }).join("")}
-      </div>
-      <button class="stocks-bottom-btn ${hasAnswer ? "" : "disabled"}" onclick="continueStocksQuiz()" ${hasAnswer ? "" : "disabled"}>Continue</button>
-    </section>
-  `;
-}
-
-function renderStocksComplete() {
-  return `
-    <section class="stocks-page">
-      <div class="statusbar"><span>14:18</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
-      <div class="stocks-success-mark">✓</div>
-      <h1>Your investor profile is all set up!</h1>
-      <p class="stocks-subtitle">You can now buy, sell, send, and receive crypto. Explore valuable insights about different risk profiles below.</p>
-      <section class="stocks-risk-card">
-        <small>YOUR RISK PROFILE</small>
-        <h2>Conservative</h2>
-        <p>Prefers minimal risk and prioritizes capital preservation.</p>
-        <button onclick="toast('Risk profile details opened')" type="button">Learn more</button>
-      </section>
-      <button class="stocks-bottom-btn" onclick="openView('stocks')">Continue</button>
-    </section>
   `;
 }
 
@@ -2610,12 +2426,10 @@ function render() {
     app.innerHTML = renderDepositFlow();
     return;
   }
-  if (state.view === "stocksQuiz") {
-    app.innerHTML = renderStocksQuiz();
-    return;
-  }
-  if (state.view === "stocksComplete") {
-    app.innerHTML = renderStocksComplete();
+  if (state.view === "stocksQuiz" || state.view === "stocksComplete") {
+    state.stocksProfileComplete = true;
+    state.stocksFlow = null;
+    setState({ view: "stocks" });
     return;
   }
   if (state.view === "stocks") {
