@@ -12,6 +12,14 @@ const SUPABASE_SCRIPT_URLS = [
   "https://unpkg.com/@supabase/supabase-js@2",
 ];
 let supabaseClient = null;
+const MAX_PERSONAL_GOALS = 5;
+const personalGoalTemplates = [
+  { id: "B1", name: "Essential Expense Fund", label: "Personal Goal 1", emoji: "🏠", account: "8189 3753 6101" },
+  { id: "B2", name: "Upcoming bill and payment obligations", label: "Personal Goal 2", emoji: "🧾", account: "8189 3753 6102" },
+  { id: "B3", name: "Emergency Fund", label: "Personal Goal 3", emoji: "🛟", account: "8189 3753 6103" },
+  { id: "B4", name: "Goal-Based savings fund", label: "Personal Goal 4", emoji: "🎯", account: "8189 3753 6104" },
+  { id: "B5", name: "Personal Lifestyle Fund", label: "Personal Goal 5", emoji: "✨", account: "8189 3753 6105" },
+];
 
 const defaultState = {
   tab: "wallet",
@@ -21,14 +29,24 @@ const defaultState = {
   hidden: false,
   timeDeposit: 0,
   goal: {
-    name: "japan",
-    emoji: "👠",
+    id: "B1",
+    label: "Personal Goal 1",
+    name: "Essential Expense Fund",
+    emoji: "🏠",
     balance: 0,
     target: 25000,
     daysLeft: 180,
     rate: 8,
-    account: "8189 3753 6162",
+    account: "8189 3753 6101",
   },
+  personalGoals: personalGoalTemplates.map((goal) => ({
+    ...goal,
+    balance: 0,
+    target: 25000,
+    daysLeft: 180,
+    rate: 8,
+  })),
+  selectedGoalId: "B1",
   depositFlow: null,
   transactions: [
     { title: "Account opened", detail: "Welcome wallet funds", amount: "+ ₱1,000.00", createdAt: new Date().toISOString() },
@@ -75,7 +93,6 @@ let authMode = "signin";
 let authSubmitting = false;
 const app = document.querySelector("#app");
 const modalRoot = document.querySelector("#modalRoot");
-let marketTimer = null;
 let marketLoading = false;
 const COINGECKO_MARKET_IDS = {
   BTC: "bitcoin",
@@ -115,6 +132,46 @@ function cloneDefaultState() {
   return typeof structuredClone === "function"
     ? structuredClone(defaultState)
     : JSON.parse(JSON.stringify(defaultState));
+}
+
+function defaultPersonalGoal(template, existing = {}) {
+  return {
+    ...template,
+    balance: Number(existing.balance ?? 0),
+    target: Number(existing.target ?? 25000),
+    daysLeft: Number(existing.daysLeft ?? 180),
+    rate: Number(existing.rate ?? 8),
+  };
+}
+
+function normalizePersonalGoals(appState = {}) {
+  const existingGoals = Array.isArray(appState.personalGoals) ? appState.personalGoals : [];
+  const legacyGoal = appState.goal && !Array.isArray(appState.personalGoals) ? appState.goal : null;
+  const goals = personalGoalTemplates.map((template, index) => {
+    const existing = existingGoals.find((goal) => goal.id === template.id) || existingGoals[index] || {};
+    const migrated = legacyGoal && index === 0 ? legacyGoal : existing;
+    return defaultPersonalGoal(template, migrated);
+  });
+  const selectedGoalId = goals.some((goal) => goal.id === appState.selectedGoalId)
+    ? appState.selectedGoalId
+    : goals[0].id;
+  return { goals, selectedGoalId, goal: goals.find((goal) => goal.id === selectedGoalId) || goals[0] };
+}
+
+function normalizeState(appState = cloneDefaultState()) {
+  const normalized = {
+    ...cloneDefaultState(),
+    ...appState,
+  };
+  const personalGoals = normalizePersonalGoals(appState);
+  normalized.personalGoals = personalGoals.goals;
+  normalized.selectedGoalId = personalGoals.selectedGoalId;
+  normalized.goal = personalGoals.goal;
+  return normalized;
+}
+
+function totalPersonalGoalsBalance() {
+  return (state.personalGoals || []).reduce((total, goal) => total + Number(goal.balance || 0), 0);
 }
 
 function accountKey(email) {
@@ -165,7 +222,7 @@ function walletRowPayload(user = session?.user) {
     wallet: Number(state.wallet || 0),
     savings: Number(state.savings || 0),
     time_deposit: Number(state.timeDeposit || 0),
-    goal_balance: Number(state.goal?.balance || 0),
+    goal_balance: totalPersonalGoalsBalance(),
     app_state: state,
     updated_at: new Date().toISOString(),
   };
@@ -227,19 +284,19 @@ async function loadWalletState(user) {
   }
 
   if (data?.app_state) {
+    const loadedState = normalizeState(data.app_state);
+    const goalBalance = Number(data.goal_balance ?? loadedState.personalGoals.reduce((total, goal) => total + Number(goal.balance || 0), 0));
+    if (!Array.isArray(data.app_state.personalGoals) && Number.isFinite(goalBalance)) {
+      loadedState.personalGoals[0].balance = Number(data.app_state.goal?.balance ?? goalBalance);
+      loadedState.goal = loadedState.personalGoals.find((goal) => goal.id === loadedState.selectedGoalId) || loadedState.personalGoals[0];
+    }
     return {
-      ...cloneDefaultState(),
-      ...data.app_state,
+      ...loadedState,
       stocksProfileComplete: true,
       stocksFlow: null,
       wallet: Number(data.wallet ?? data.app_state.wallet ?? 1000),
       savings: Number(data.savings ?? data.app_state.savings ?? 0),
       timeDeposit: Number(data.time_deposit ?? data.app_state.timeDeposit ?? 0),
-      goal: {
-        ...cloneDefaultState().goal,
-        ...(data.app_state.goal || {}),
-        balance: Number(data.goal_balance ?? data.app_state.goal?.balance ?? 0),
-      },
     };
   }
 
@@ -453,7 +510,7 @@ function money(value) {
 }
 
 function setState(patch) {
-  state = { ...state, ...patch };
+  state = normalizeState({ ...state, ...patch });
   saveState();
   render();
 }
@@ -464,6 +521,11 @@ function go(tab) {
 
 function openView(view) {
   setState({ view });
+}
+
+function openGoal(goalId = state.selectedGoalId) {
+  const goal = state.personalGoals.find((item) => item.id === goalId) || state.personalGoals[0];
+  setState({ selectedGoalId: goal.id, goal, view: "goal" });
 }
 
 function startDepositFlow() {
@@ -566,18 +628,6 @@ async function refreshMarketPrices({ silent = false } = {}) {
   } finally {
     marketLoading = false;
   }
-}
-
-function startMarketTracking() {
-  if (marketTimer) return;
-  refreshMarketPrices({ silent: true });
-  marketTimer = setInterval(() => refreshMarketPrices({ silent: true }), 5000);
-}
-
-function stopMarketTracking() {
-  if (!marketTimer) return;
-  clearInterval(marketTimer);
-  marketTimer = null;
 }
 
 function formatTransactionDateTime(tx) {
@@ -721,10 +771,12 @@ function renderWallet() {
 }
 
 function renderSavings() {
+  const personalGoals = (state.personalGoals || []).slice(0, MAX_PERSONAL_GOALS);
+  const canCreateGoal = personalGoals.length < MAX_PERSONAL_GOALS;
   return `
     ${topChrome()}
     ${balanceCard({
-      amount: state.savings + state.timeDeposit + state.goal.balance,
+      amount: state.savings + state.timeDeposit + totalPersonalGoalsBalance(),
       label: "Total savings",
       actions: `
         <button class="pill-btn" onclick="startDepositFlow()"><span>${icon("in")}</span> Deposit</button>
@@ -745,13 +797,16 @@ function renderSavings() {
     </button>
     <h2 class="section-title">Personal Goals</h2>
     <section class="split-grid">
-      <button class="goal-card pink" onclick="openView('goal')">
-        <div>${state.goal.emoji} <span class="rate-badge" style="background:#fff;color:#111">${state.goal.balance ? state.goal.rate : 0}.0% p.a.</span></div>
-        <h2>${state.goal.name}</h2>
-        <div class="balance" style="font-size:28px">${money(state.goal.balance)}</div>
-      </button>
-      <button class="goal-card create" onclick="openGoalSheet()">
-        <div><span class="plus">+</span><h3>Create a new<br>Personal Goal</h3><div class="muted">🚀 Earn up to 8% p.a.</div></div>
+      ${personalGoals.map((goal) => `
+        <button class="goal-card pink" onclick="openGoal('${goal.id}')">
+          <div>${goal.emoji} <span class="rate-badge" style="background:#fff;color:#111">${goal.balance ? goal.rate : 0}.0% p.a.</span></div>
+          <h2>${escapeHTML(goal.name)}</h2>
+          <div class="muted">${escapeHTML(goal.label)}</div>
+          <div class="balance" style="font-size:28px">${money(goal.balance)}</div>
+        </button>
+      `).join("")}
+      <button class="goal-card create" onclick="openGoalSheet()" ${canCreateGoal ? "" : "disabled"}>
+        <div><span class="plus">${canCreateGoal ? "+" : "5"}</span><h3>${canCreateGoal ? "Create a new<br>Personal Goal" : "Personal Goal<br>limit reached"}</h3><div class="muted">Max ${MAX_PERSONAL_GOALS} personal goals</div></div>
       </button>
     </section>
     ${footerCopy()}
@@ -1662,13 +1717,15 @@ function resetAccount() {
   state.wallet = 0;
   state.savings = 0;
   state.timeDeposit = 0;
-  state.goal = {
-    ...state.goal,
+  state.personalGoals = state.personalGoals.slice(0, MAX_PERSONAL_GOALS).map((goal) => ({
+    ...goal,
     balance: 0,
     target: 0,
     daysLeft: 0,
     rate: 0,
-  };
+  }));
+  state.selectedGoalId = state.personalGoals[0]?.id || "B1";
+  state.goal = state.personalGoals[0];
   state.depositFlow = null;
   state.transactions = [];
   state.creditLimit = 0;
@@ -1738,7 +1795,8 @@ function renderSavingsDetail() {
 }
 
 function renderGoalDetail() {
-  const pct = Math.min(100, Math.round((state.goal.balance / state.goal.target) * 100));
+  const goal = state.goal || state.personalGoals[0];
+  const pct = goal.target > 0 ? Math.min(100, Math.round((goal.balance / goal.target) * 100)) : 0;
   return `
     <section class="detail goal">
       <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
@@ -1748,15 +1806,16 @@ function renderGoalDetail() {
         <span></span>
       </div>
       <div class="detail-title">
-        <div style="font-size:34px">${state.goal.emoji}</div>
-        <h1>${state.goal.name}</h1>
-        <div class="account-num">${state.goal.account} <button onclick="toast('Goal account copied')" class="back" style="font-size:18px">${icon("copy")}</button></div>
+        <div style="font-size:34px">${goal.emoji}</div>
+        <h1>${escapeHTML(goal.name)}</h1>
+        <div class="muted">${escapeHTML(goal.label)}</div>
+        <div class="account-num">${goal.account} <button onclick="toast('Goal account copied')" class="back" style="font-size:18px">${icon("copy")}</button></div>
       </div>
       <section class="account-summary">
-        <div class="progress-row"><b class="muted">${state.goal.daysLeft} DAYS LEFT</b><span class="eye">${icon("eye")}</span></div>
-        <div class="progress-row"><div><div class="balance" style="font-size:42px">${money(state.goal.balance)}</div><h2 class="muted">out of ${peso.format(state.goal.target)}</h2></div><div style="font-size:34px">${pct}%</div></div>
+        <div class="progress-row"><b class="muted">${goal.daysLeft} DAYS LEFT</b><span class="eye">${icon("eye")}</span></div>
+        <div class="progress-row"><div><div class="balance" style="font-size:42px">${money(goal.balance)}</div><h2 class="muted">out of ${peso.format(goal.target)}</h2></div><div style="font-size:34px">${pct}%</div></div>
         <div class="progress" style="--p:${pct}%"><span></span></div>
-        <b>Up to ${state.goal.rate}% p.a. for goals up to ₱100,000 ⓘ</b>
+        <b>Up to ${goal.rate}% p.a. for goals up to ₱100,000 ⓘ</b>
       </section>
       <button class="wide-deposit" onclick="openMoneySheet('goalDeposit')">${icon("in")} Deposit</button>
       <section class="goal-boost"><b>🐷 Give your goal a boost!</b><span class="white-pill">up to 8% p.a. ›</span></section>
@@ -1774,7 +1833,7 @@ function renderDepositFlow() {
   const titles = {
     1: "Select a fund source",
     2: "Select a destination",
-    3: `Deposit to ${flow.destination === "goal" ? state.goal.name : "my account"}`,
+    3: `Deposit to ${flow.destination === "goal" ? depositDestinationLabel() : "my account"}`,
     4: "Review deposit",
   };
   return `
@@ -1819,10 +1878,12 @@ function depositDestinationStep() {
       <span class="account-left"><span>🐷</span><span><b>My Savings</b><small>•••• •••• 2872</small></span></span>
       <strong>${money(state.savings)}</strong>
     </button>
-    <button class="account-option pink" onclick="chooseDepositDestination('goal')">
-      <span class="account-left"><span>${state.goal.emoji}</span><span><b>${state.goal.name}</b><small>•••• •••• 6162</small></span></span>
-      <strong>${money(state.goal.balance)}</strong>
-    </button>
+    ${(state.personalGoals || []).slice(0, MAX_PERSONAL_GOALS).map((goal) => `
+      <button class="account-option pink" onclick="chooseDepositDestination('goal', '${goal.id}')">
+        <span class="account-left"><span>${goal.emoji}</span><span><b>${escapeHTML(goal.name)}</b><small>${escapeHTML(goal.label)} · •••• ${goal.account.slice(-4)}</small></span></span>
+        <strong>${money(goal.balance)}</strong>
+      </button>
+    `).join("")}
   `;
 }
 
@@ -1861,12 +1922,12 @@ function chooseDepositSource(source) {
   updateDepositFlow({ source, step: 2 });
 }
 
-function chooseDepositDestination(destination) {
+function chooseDepositDestination(destination, goalId = state.selectedGoalId) {
   if (state.depositFlow.source === destination) {
     toast("Choose a different destination");
     return;
   }
-  updateDepositFlow({ destination, step: 3 });
+  updateDepositFlow({ destination, goalId, step: 3 });
   setTimeout(() => document.querySelector("#depositAmount")?.focus(), 0);
 }
 
@@ -1898,7 +1959,12 @@ function finishDepositFlow() {
     if (source === "savings") state.savings -= amount;
   }
   if (destination === "savings") state.savings += amount;
-  if (destination === "goal") state.goal.balance += amount;
+  if (destination === "goal") {
+    const goal = state.personalGoals.find((item) => item.id === state.depositFlow.goalId) || state.goal;
+    goal.balance += amount;
+    state.selectedGoalId = goal.id;
+    state.goal = goal;
+  }
   addTransaction("Deposited to", depositDestinationLabel(), `+ ${peso.format(amount)}`);
   state.depositFlow = null;
   state.view = destination === "goal" ? "goal" : "mySavings";
@@ -1930,7 +1996,9 @@ function depositSourceLabel() {
 }
 
 function depositDestinationLabel() {
-  return state.depositFlow?.destination === "goal" ? state.goal.name : "My Savings";
+  if (state.depositFlow?.destination !== "goal") return "My Savings";
+  const goal = state.personalGoals.find((item) => item.id === state.depositFlow.goalId) || state.goal;
+  return goal.name;
 }
 
 function transactionsPanel() {
@@ -2037,8 +2105,10 @@ function submitMoney(kind) {
   if (kind === "goalDeposit") {
     if (amount > state.wallet) return toast("Cash in first to fund your goal");
     state.wallet -= amount;
-    state.goal.balance += amount;
-    addTransaction("Deposited to goal", state.goal.name, `+ ${peso.format(amount)}`);
+    const goal = state.personalGoals.find((item) => item.id === state.selectedGoalId) || state.goal;
+    goal.balance += amount;
+    state.goal = goal;
+    addTransaction("Deposited to goal", goal.name, `+ ${peso.format(amount)}`);
   }
   saveState();
   closeModal();
@@ -2066,7 +2136,6 @@ function stockPortfolioValue() {
 }
 
 function openStocks() {
-  startMarketTracking();
   state.stocksProfileComplete = true;
   state.stocksFlow = null;
   setState({ view: "stocks" });
@@ -2343,13 +2412,18 @@ function renderStockHistory() {
 }
 
 function openGoalSheet() {
+  if ((state.personalGoals || []).length >= MAX_PERSONAL_GOALS) {
+    toast(`You can only have up to ${MAX_PERSONAL_GOALS} personal goals`);
+    return;
+  }
+  const nextGoal = personalGoalTemplates[state.personalGoals.length];
   modalRoot.className = "modal-root active";
   modalRoot.setAttribute("aria-hidden", "false");
   modalRoot.innerHTML = `
     <div class="scrim" onclick="closeModal()"></div>
     <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="goalTitle">
       <h2 id="goalTitle">Create a Personal Goal</h2>
-      <label class="field">Goal name <input id="goalName" value="tokyo trip" /></label>
+      <label class="field">Goal name <input id="goalName" value="${escapeHTML(nextGoal?.name || "new goal")}" /></label>
       <label class="field">Target amount <input id="goalTarget" type="number" value="50000" /></label>
       <div class="sheet-actions">
         <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
@@ -2360,13 +2434,27 @@ function openGoalSheet() {
 }
 
 function submitGoal() {
+  if ((state.personalGoals || []).length >= MAX_PERSONAL_GOALS) {
+    closeModal();
+    toast(`You can only have up to ${MAX_PERSONAL_GOALS} personal goals`);
+    return;
+  }
   const name = document.querySelector("#goalName").value.trim() || "new goal";
   const target = Number(document.querySelector("#goalTarget").value || 25000);
-  state.goal = { ...state.goal, name, target, balance: 0, daysLeft: 180, rate: 8 };
+  const template = personalGoalTemplates[state.personalGoals.length] || {
+    id: `B${state.personalGoals.length + 1}`,
+    label: `Personal Goal ${state.personalGoals.length + 1}`,
+    emoji: "🎯",
+    account: `8189 3753 61${String(state.personalGoals.length + 1).padStart(2, "0")}`,
+  };
+  const goal = defaultPersonalGoal({ ...template, name }, { target });
+  state.personalGoals = [...state.personalGoals, goal].slice(0, MAX_PERSONAL_GOALS);
+  state.selectedGoalId = goal.id;
+  state.goal = goal;
   addTransaction("Created account", name);
   saveState();
   closeModal();
-  openView("goal");
+  openGoal(goal.id);
 }
 
 function closeModal() {
@@ -2401,15 +2489,11 @@ function render() {
   }
 
   if (!session?.user) {
-    stopMarketTracking();
     app.innerHTML = renderLogin();
     return;
   }
 
   let content = "";
-  const marketViews = ["stocks", "stockDetail", "stockTrade", "stockHistory"];
-  if (marketViews.includes(state.view)) startMarketTracking();
-  else stopMarketTracking();
   if (state.view === "profile") {
     app.innerHTML = renderProfile();
     return;
