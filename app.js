@@ -1732,15 +1732,14 @@ function resetAccount() {
   state.wallet = 0;
   state.savings = 0;
   state.timeDeposit = 0;
-  state.personalGoals = state.personalGoals.slice(0, MAX_PERSONAL_GOALS).map((goal) => ({
-    ...goal,
-    balance: 0,
-    target: 0,
-    daysLeft: 0,
-    rate: 0,
-  }));
-  state.selectedGoalId = state.personalGoals[0]?.id ?? null;
-  state.goal = state.personalGoals[0];
+  // Re-derive buckets from scratch instead of just zeroing whatever's
+  // currently stored - this is what actually clears out buckets left over
+  // from stale/legacy data (e.g. accounts seeded before buckets were tied
+  // to Shellby motivations), not just their balances.
+  const reseeded = seedPersonalGoalsForEmail({}, session?.user?.email);
+  state.personalGoals = reseeded.personalGoals;
+  state.selectedGoalId = reseeded.selectedGoalId;
+  state.goal = reseeded.goal;
   state.depositFlow = null;
   state.transactions = [];
   state.creditLimit = 0;
