@@ -12,14 +12,25 @@ const SUPABASE_SCRIPT_URLS = [
   "https://unpkg.com/@supabase/supabase-js@2",
 ];
 let supabaseClient = null;
-const MAX_PERSONAL_GOALS = 5;
+const MAX_PERSONAL_GOALS = 4;
 const personalGoalTemplates = [
   { id: "B1", name: "Essential Expense Fund", label: "Personal Goal 1", emoji: "🏠", account: "8189 3753 6101" },
-  { id: "B2", name: "Upcoming bill and payment obligations", label: "Personal Goal 2", emoji: "🧾", account: "8189 3753 6102" },
-  { id: "B3", name: "Emergency Fund", label: "Personal Goal 3", emoji: "🛟", account: "8189 3753 6103" },
-  { id: "B4", name: "Goal-Based savings fund", label: "Personal Goal 4", emoji: "🎯", account: "8189 3753 6104" },
-  { id: "B5", name: "Personal Lifestyle Fund", label: "Personal Goal 5", emoji: "✨", account: "8189 3753 6105" },
+  { id: "B2", name: "Emergency Fund", label: "Personal Goal 2", emoji: "🛟", account: "8189 3753 6102" },
+  { id: "B3", name: "Investment Fund", label: "Personal Goal 3", emoji: "📈", account: "8189 3753 6103" },
+  { id: "B4", name: "Personal Lifestyle Fund", label: "Personal Goal 4", emoji: "✨", account: "8189 3753 6104" },
 ];
+
+// Each entry matches a Shelby onboarding motivation (M1-M4). New signups only
+// get the buckets they're entitled to; every other bucket stays hidden until
+// Shelby's goal-creation flow (or the in-app "Create a new Personal Goal"
+// sheet) actually creates it.
+const DEMO_ACCOUNT_BUCKET_IDS = {
+  "main@gmail.com": ["B1", "B2", "B3", "B4"],
+  "cashflow@gmail.com": ["B1"],
+  "emergency@gmail.com": ["B2"],
+  "accumulating@gmail.com": ["B3"],
+  "freedom@gmail.com": ["B4"],
+};
 
 const defaultState = {
   tab: "wallet",
@@ -28,25 +39,12 @@ const defaultState = {
   savings: 0,
   hidden: false,
   timeDeposit: 0,
-  goal: {
-    id: "B1",
-    label: "Personal Goal 1",
-    name: "Essential Expense Fund",
-    emoji: "🏠",
-    balance: 0,
-    target: 25000,
-    daysLeft: 180,
-    rate: 8,
-    account: "8189 3753 6101",
-  },
-  personalGoals: personalGoalTemplates.map((goal) => ({
-    ...goal,
-    balance: 0,
-    target: 25000,
-    daysLeft: 180,
-    rate: 8,
-  })),
-  selectedGoalId: "B1",
+  goal: null,
+  // Buckets only exist here once Shelby's goal-creation flow (or this app's
+  // own "Create a new Personal Goal" sheet) actually creates them - a fresh
+  // account starts with none, not with all 4 pre-filled.
+  personalGoals: [],
+  selectedGoalId: null,
   depositFlow: null,
   transactions: [
     { title: "Account opened", detail: "Welcome wallet funds", amount: "+ ₱1,000.00", createdAt: new Date().toISOString() },
@@ -146,16 +144,33 @@ function defaultPersonalGoal(template, existing = {}) {
 
 function normalizePersonalGoals(appState = {}) {
   const existingGoals = Array.isArray(appState.personalGoals) ? appState.personalGoals : [];
-  const legacyGoal = appState.goal && !Array.isArray(appState.personalGoals) ? appState.goal : null;
-  const goals = personalGoalTemplates.map((template, index) => {
-    const existing = existingGoals.find((goal) => goal.id === template.id) || existingGoals[index] || {};
-    const migrated = legacyGoal && index === 0 ? legacyGoal : existing;
-    return defaultPersonalGoal(template, migrated);
-  });
+  const legacyGoal = appState.goal && !Array.isArray(appState.personalGoals) ? [appState.goal] : [];
+  const sourceGoals = existingGoals.length ? existingGoals : legacyGoal;
+  // Only keep buckets that already exist for this account - never
+  // auto-create the other buckets just because their template exists.
+  const goals = personalGoalTemplates
+    .filter((template) => sourceGoals.some((goal) => goal.id === template.id))
+    .map((template) => {
+      const existing = sourceGoals.find((goal) => goal.id === template.id) || {};
+      return defaultPersonalGoal(template, existing);
+    });
   const selectedGoalId = goals.some((goal) => goal.id === appState.selectedGoalId)
     ? appState.selectedGoalId
-    : goals[0].id;
-  return { goals, selectedGoalId, goal: goals.find((goal) => goal.id === selectedGoalId) || goals[0] };
+    : goals[0]?.id ?? null;
+  return { goals, selectedGoalId, goal: goals.find((goal) => goal.id === selectedGoalId) || goals[0] || null };
+}
+
+function seedPersonalGoalsForEmail(appState, email) {
+  const ids = DEMO_ACCOUNT_BUCKET_IDS[accountKey(email)] || [];
+  const goals = personalGoalTemplates
+    .filter((template) => ids.includes(template.id))
+    .map((template) => defaultPersonalGoal(template));
+  return {
+    ...appState,
+    personalGoals: goals,
+    selectedGoalId: goals[0]?.id ?? null,
+    goal: goals[0] ?? null,
+  };
 }
 
 function normalizeState(appState = cloneDefaultState()) {
@@ -300,7 +315,7 @@ async function loadWalletState(user) {
     };
   }
 
-  const freshState = cloneDefaultState();
+  const freshState = seedPersonalGoalsForEmail(cloneDefaultState(), user.email);
   await persistWalletState(user, freshState);
   return freshState;
 }
@@ -806,7 +821,7 @@ function renderSavings() {
         </button>
       `).join("")}
       <button class="goal-card create" onclick="openGoalSheet()" ${canCreateGoal ? "" : "disabled"}>
-        <div><span class="plus">${canCreateGoal ? "+" : "5"}</span><h3>${canCreateGoal ? "Create a new<br>Personal Goal" : "Personal Goal<br>limit reached"}</h3><div class="muted">Max ${MAX_PERSONAL_GOALS} personal goals</div></div>
+        <div><span class="plus">${canCreateGoal ? "+" : MAX_PERSONAL_GOALS}</span><h3>${canCreateGoal ? "Create a new<br>Personal Goal" : "Personal Goal<br>limit reached"}</h3><div class="muted">Max ${MAX_PERSONAL_GOALS} personal goals</div></div>
       </button>
     </section>
     ${footerCopy()}
@@ -1724,7 +1739,7 @@ function resetAccount() {
     daysLeft: 0,
     rate: 0,
   }));
-  state.selectedGoalId = state.personalGoals[0]?.id || "B1";
+  state.selectedGoalId = state.personalGoals[0]?.id ?? null;
   state.goal = state.personalGoals[0];
   state.depositFlow = null;
   state.transactions = [];
@@ -2411,12 +2426,18 @@ function renderStockHistory() {
   `;
 }
 
+function nextAvailablePersonalGoalTemplate() {
+  return personalGoalTemplates.find(
+    (template) => !(state.personalGoals || []).some((goal) => goal.id === template.id)
+  );
+}
+
 function openGoalSheet() {
   if ((state.personalGoals || []).length >= MAX_PERSONAL_GOALS) {
     toast(`You can only have up to ${MAX_PERSONAL_GOALS} personal goals`);
     return;
   }
-  const nextGoal = personalGoalTemplates[state.personalGoals.length];
+  const nextGoal = nextAvailablePersonalGoalTemplate();
   modalRoot.className = "modal-root active";
   modalRoot.setAttribute("aria-hidden", "false");
   modalRoot.innerHTML = `
@@ -2441,12 +2462,12 @@ function submitGoal() {
   }
   const name = document.querySelector("#goalName").value.trim() || "new goal";
   const target = Number(document.querySelector("#goalTarget").value || 25000);
-  const template = personalGoalTemplates[state.personalGoals.length] || {
-    id: `B${state.personalGoals.length + 1}`,
-    label: `Personal Goal ${state.personalGoals.length + 1}`,
-    emoji: "🎯",
-    account: `8189 3753 61${String(state.personalGoals.length + 1).padStart(2, "0")}`,
-  };
+  const template = nextAvailablePersonalGoalTemplate();
+  if (!template) {
+    closeModal();
+    toast(`You can only have up to ${MAX_PERSONAL_GOALS} personal goals`);
+    return;
+  }
   const goal = defaultPersonalGoal({ ...template, name }, { target });
   state.personalGoals = [...state.personalGoals, goal].slice(0, MAX_PERSONAL_GOALS);
   state.selectedGoalId = goal.id;
