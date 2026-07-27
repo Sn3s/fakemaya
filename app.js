@@ -185,6 +185,10 @@ function normalizeState(appState = cloneDefaultState()) {
   return normalized;
 }
 
+function fallbackPersonalGoal() {
+  return defaultPersonalGoal(personalGoalTemplates[0]);
+}
+
 function totalPersonalGoalsBalance() {
   return (state.personalGoals || []).reduce((total, goal) => total + Number(goal.balance || 0), 0);
 }
@@ -2040,13 +2044,16 @@ function footerCopy(prefix = "Maya Savings is powered by Maya Bank, Inc.") {
 }
 
 function openMoneySheet(kind) {
+  const activeGoal = state.personalGoals?.find((item) => item.id === state.selectedGoalId)
+    || state.goal
+    || fallbackPersonalGoal();
   const labels = {
     cashin: ["Cash in", "Add money to your wallet"],
     send: ["Send money", "Simulate sending money from your wallet. This will be recorded as an expense."],
     deposit: ["Deposit", "Move wallet money to My Savings"],
     transfer: ["Transfer", "Move savings money to your wallet"],
     timeDeposit: ["Express Deposit", "Add to Maya Black time deposit"],
-    goalDeposit: ["Goal Deposit", `Deposit to ${state.goal.name}`],
+    goalDeposit: ["Goal Deposit", `Deposit to ${activeGoal.name}`],
   };
   const [title, desc] = labels[kind];
   modalRoot.className = "modal-root active";
@@ -2119,7 +2126,9 @@ function submitMoney(kind) {
   if (kind === "goalDeposit") {
     if (amount > state.wallet) return toast("Cash in first to fund your goal");
     state.wallet -= amount;
-    const goal = state.personalGoals.find((item) => item.id === state.selectedGoalId) || state.goal;
+    const goal = state.personalGoals?.find((item) => item.id === state.selectedGoalId)
+      || state.goal
+      || fallbackPersonalGoal();
     goal.balance += amount;
     state.goal = goal;
     addTransaction("Deposited to goal", goal.name, `+ ${peso.format(amount)}`);
