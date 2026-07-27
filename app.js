@@ -547,6 +547,11 @@ function openView(view) {
 
 function openGoal(goalId = state.selectedGoalId) {
   const goal = state.personalGoals.find((item) => item.id === goalId) || state.personalGoals[0];
+  if (!goal) {
+    setState({ view: "home", selectedGoalId: null, goal: null });
+    toast("Create a Personal Goal first");
+    return;
+  }
   setState({ selectedGoalId: goal.id, goal, view: "goal" });
 }
 
@@ -579,6 +584,63 @@ function addTransaction(title, detail, amount = "") {
     createdAt: new Date().toISOString(),
   });
   state.transactions = state.transactions.slice(0, 5);
+}
+
+function openDeleteGoalSheet(goalId = state.selectedGoalId) {
+  const goal = (state.personalGoals || []).find((item) => item.id === goalId);
+  if (!goal) {
+    toast("Goal bucket not found");
+    return;
+  }
+  const balance = Number(goal.balance || 0);
+  modalRoot.className = "modal-root active";
+  modalRoot.setAttribute("aria-hidden", "false");
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="deleteGoalTitle">
+      <h2 id="deleteGoalTitle">Delete ${escapeHTML(goal.name)}?</h2>
+      <p class="muted">
+        ${balance > 0
+          ? `${peso.format(balance)} will be transferred back to your e-wallet before this bucket is deleted.`
+          : "This empty bucket will be removed from your Personal Goals."}
+      </p>
+      <div class="sheet-actions">
+        <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="pill-btn danger" onclick="deletePersonalGoal('${goal.id}')">Delete bucket</button>
+      </div>
+    </section>
+  `;
+}
+
+function deletePersonalGoal(goalId) {
+  const goals = state.personalGoals || [];
+  const goal = goals.find((item) => item.id === goalId);
+  if (!goal) {
+    closeModal();
+    toast("Goal bucket not found");
+    return;
+  }
+
+  const balance = Number(goal.balance || 0);
+  if (balance > 0) {
+    state.wallet += balance;
+    addTransaction("Transferred from goal", `${goal.name} deleted`, `+ ${peso.format(balance)}`);
+  } else {
+    addTransaction("Deleted goal", goal.name);
+  }
+
+  state.personalGoals = goals.filter((item) => item.id !== goalId);
+  const nextGoal = state.personalGoals[0] || null;
+  state.selectedGoalId = nextGoal?.id ?? null;
+  state.goal = nextGoal;
+  state.view = "home";
+
+  saveState();
+  closeModal();
+  render();
+  toast(balance > 0
+    ? `${peso.format(balance)} moved to e-wallet and bucket deleted`
+    : "Bucket deleted");
 }
 
 function formatClock(value = new Date()) {
@@ -1797,6 +1859,7 @@ function renderGoalDetail() {
       <h3 class="muted" style="letter-spacing:3px">GOAL SETTINGS</h3>
       <section class="settings-card">
         <button class="list-row" onclick="toast('Goal account details opened')"><span class="left-stack"><span>${icon("account")}</span><b>View account details</b></span><span class="muted">›</span></button>
+        <button class="list-row danger-row" onclick="openDeleteGoalSheet('${goal.id}')"><span class="left-stack"><span>🗑</span><b>Delete bucket</b></span><span class="muted">›</span></button>
       </section>
       ${transactionsPanel()}
     </section>

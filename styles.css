@@ -1034,6 +1034,11 @@ button {
   border-bottom: 0;
 }
 
+.list-row.danger-row,
+.list-row.danger-row .muted {
+  color: #b42318;
+}
+
 .left-stack {
   display: flex;
   gap: 14px;
@@ -1857,6 +1862,11 @@ button {
 .ghost {
   background: #efefef;
   color: #333;
+}
+
+.danger {
+  background: #b42318;
+  color: #fff;
 }
 
 .toast {
