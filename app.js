@@ -178,6 +178,9 @@ function normalizeState(appState = cloneDefaultState()) {
     ...cloneDefaultState(),
     ...appState,
   };
+  if (!Number.isFinite(Number(normalized.creditLimit)) || Number(normalized.creditLimit) <= 0) {
+    normalized.creditLimit = 5000;
+  }
   const personalGoals = normalizePersonalGoals(appState);
   normalized.personalGoals = personalGoals.goals;
   normalized.selectedGoalId = personalGoals.selectedGoalId;
