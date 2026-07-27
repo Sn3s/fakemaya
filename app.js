@@ -52,7 +52,7 @@ const defaultState = {
   
   // Credit Journey State Properties
   creditView: "home", // home, promo, privacy, form, approved
-  creditLimit: 15000.00,
+  creditLimit: 5000.00,
   creditUsed: 0.00,
   creditForm: {
     billingDay: null,
@@ -1700,7 +1700,7 @@ function resetAccount() {
   state.goal = reseeded.goal;
   state.depositFlow = null;
   state.transactions = [];
-  state.creditLimit = 0;
+  state.creditLimit = 5000;
   state.creditUsed = 0;
   state.creditView = "home";
   state.loanSetup = {
