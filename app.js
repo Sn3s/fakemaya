@@ -79,7 +79,8 @@ const defaultState = {
   stockHoldings: {},
   stockTransactions: [],
   marketPrices: {},
-  marketLastUpdated: null
+  marketLastUpdated: null,
+  marketPriceError: null
   // ───────────────────────────────────────────────────────────────────
 
 };
@@ -185,6 +186,8 @@ function normalizeState(appState = cloneDefaultState()) {
   normalized.personalGoals = personalGoals.goals;
   normalized.selectedGoalId = personalGoals.selectedGoalId;
   normalized.goal = personalGoals.goal;
+  normalized.marketPrices = normalized.marketPrices && typeof normalized.marketPrices === "object" ? normalized.marketPrices : {};
+  normalized.marketPriceError = normalized.marketPriceError || null;
   return normalized;
 }
 
@@ -706,9 +709,13 @@ async function refreshMarketPrices({ silent = false } = {}) {
       ...(await fetchCoinGeckoMarketPrices()),
     };
     state.marketLastUpdated = new Date().toISOString();
+    state.marketPriceError = null;
+    saveState();
     if (["stocks", "stockDetail", "stockTrade", "stockHistory"].includes(state.view)) render();
   } catch {
-    if (!silent) toast("Live prices unavailable. Showing sample prices.");
+    state.marketPriceError = "Refresh didn't work properly. Try again in a bit.";
+    if (["stocks", "stockDetail", "stockTrade", "stockHistory"].includes(state.view)) render();
+    if (!silent) toast(state.marketPriceError);
   } finally {
     marketLoading = false;
   }
@@ -2162,20 +2169,30 @@ function submitMoney(kind) {
 function stockBySymbol(symbol) {
   const base = stocksCatalog.find((stock) => stock.symbol === symbol) || stocksCatalog[0];
   const live = state.marketPrices?.[base.symbol];
+  const livePrice = Number(live?.price);
+  const hasLivePrice = Number.isFinite(livePrice) && livePrice > 0;
   return {
     ...base,
     ...(live || {}),
-    price: Number(live?.price || base.price),
+    price: hasLivePrice ? livePrice : null,
     change: Number(live?.change ?? base.change),
-    source: live?.source || base.source,
+    source: hasLivePrice ? (live?.source || "CoinGecko") : "Refresh needed",
   };
 }
 
 function stockPortfolioValue() {
   return stocksCatalog.reduce((total, asset) => {
     const liveAsset = stockBySymbol(asset.symbol);
-    return total + (Number(state.stockHoldings?.[asset.symbol] || 0) * liveAsset.price);
+    return total + (Number.isFinite(liveAsset.price) ? Number(state.stockHoldings?.[asset.symbol] || 0) * liveAsset.price : 0);
   }, 0);
+}
+
+function hasPricedHolding() {
+  return stocksCatalog.some((asset) => Number(state.stockHoldings?.[asset.symbol] || 0) > 0 && Number.isFinite(stockBySymbol(asset.symbol).price));
+}
+
+function priceText(stock) {
+  return Number.isFinite(stock.price) ? peso.format(stock.price) : "Refresh needed";
 }
 
 function openStocks() {
@@ -2228,6 +2245,9 @@ function submitStockTrade(event) {
   const side = state.stockTradeSide || "buy";
   const amount = Number(form.amount.value || 0);
   if (!Number.isFinite(amount) || amount <= 0) return toast("Enter a valid amount");
+  if (!Number.isFinite(stock.price) || stock.price <= 0) {
+    return toast("Refresh prices first. Try again in a bit if refresh fails.");
+  }
 
   const units = Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
   if (side === "buy") {
@@ -2255,7 +2275,7 @@ function submitStockTrade(event) {
 function updateTradeEstimate(value, symbol) {
   const asset = stockBySymbol(symbol);
   const amount = Number(value || 0);
-  const units = amount > 0 ? amount / asset.price : 0;
+  const units = amount > 0 && Number.isFinite(asset.price) ? amount / asset.price : 0;
   const precision = asset.type === "stock" ? 4 : 8;
   const el = document.querySelector("#tradeEstimate");
   if (el) el.textContent = `${units.toFixed(precision)} ${asset.symbol}`;
@@ -2280,7 +2300,9 @@ function stockTrendSvg(stock) {
 function renderStocksDashboard() {
   const total = stockPortfolioValue();
   const holdingCount = Object.values(state.stockHoldings || {}).filter(Number).length;
-  const lastUpdated = state.marketLastUpdated ? `Updated ${formatClock(state.marketLastUpdated)}` : "Fetching live prices...";
+  const hasValuedHolding = hasPricedHolding();
+  const balanceText = holdingCount && !hasValuedHolding ? "Refresh needed" : money(total);
+  const lastUpdated = state.marketPriceError || (state.marketLastUpdated ? `Updated ${formatClock(state.marketLastUpdated)}` : "Refresh prices to value portfolio");
   return `
     <section class="stocks-page">
       <div class="statusbar"><span>14:18</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">80</span></span></div>
@@ -2291,7 +2313,7 @@ function renderStocksDashboard() {
       </header>
       <section class="stocks-balance-card">
         <span>Total investment balance</span>
-        <strong>${money(total)}</strong>
+        <strong>${balanceText}</strong>
         <small>${lastUpdated}</small>
       </section>
       <div class="stocks-actions">
@@ -2327,10 +2349,11 @@ function renderStockPortfolioRows() {
       ${stocksCatalog.filter((asset) => Number(state.stockHoldings?.[asset.symbol] || 0) > 0).map((asset) => {
         const stock = stockBySymbol(asset.symbol);
         const shares = Number(state.stockHoldings[stock.symbol] || 0);
+        const valueText = Number.isFinite(stock.price) ? money(shares * stock.price) : "Refresh needed";
         return `
           <button class="stocks-portfolio-row" onclick="openStockDetail('${stock.symbol}')" type="button">
             <span><b>${stock.symbol}</b><small>${shares.toFixed(stock.type === "stock" ? 4 : 8)} ${assetUnit(stock, shares)}</small></span>
-            <strong>${money(shares * stock.price)}</strong>
+            <strong>${valueText}</strong>
           </button>
         `;
       }).join("")}
@@ -2339,14 +2362,15 @@ function renderStockPortfolioRows() {
 }
 
 function renderStockCard(stock) {
+  const hasPrice = Number.isFinite(stock.price);
   const positive = stock.change >= 0;
   return `
     <button class="stock-card" onclick="openStockDetail('${stock.symbol}')" type="button">
       <span class="stock-logo" style="background:${stock.color}">${stock.symbol[0]}</span>
       <b>${stock.symbol} · ${stock.type.toUpperCase()}</b>
       <h3>${stock.name}</h3>
-      <strong>${peso.format(stock.price)}</strong>
-      <span class="stock-change ${positive ? "up" : "down"}">${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%</span>
+      <strong>${priceText(stock)}</strong>
+      <span class="stock-change ${positive ? "up" : "down"}">${hasPrice ? `${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%` : "Try refresh"}</span>
     </button>
   `;
 }
@@ -2354,8 +2378,11 @@ function renderStockCard(stock) {
 function renderStockDetail() {
   const stock = stockBySymbol(state.selectedStock);
   const shares = Number(state.stockHoldings?.[stock.symbol] || 0);
+  const hasPrice = Number.isFinite(stock.price);
   const positive = stock.change >= 0;
   const unitsText = assetUnit(stock, shares);
+  const changeText = hasPrice ? `${positive ? "+" : "-"} ${peso.format(stock.price * Math.abs(stock.change) / 100)} · ${stock.source}` : "Refresh prices to update this asset.";
+  const valueText = hasPrice ? peso.format(shares * stock.price) : "Refresh needed";
   return `
     <section class="stocks-page">
       <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
@@ -2363,10 +2390,10 @@ function renderStockDetail() {
         <button class="stocks-back" onclick="openView('stocks')" aria-label="Back">‹</button>
         <h2>${stock.name} <span>${stock.symbol}</span></h2>
       </header>
-      <div class="stock-price">${peso.format(stock.price)}</div>
+      <div class="stock-price">${priceText(stock)}</div>
       <div class="stock-price-row">
-        <span class="stock-change ${positive ? "up" : "down"}">${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%</span>
-        <span>${positive ? "+" : "-"} ${peso.format(stock.price * Math.abs(stock.change) / 100)} · ${stock.source}</span>
+        <span class="stock-change ${positive ? "up" : "down"}">${hasPrice ? `${positive ? "▲" : "▼"} ${Math.abs(stock.change).toFixed(2)}%` : "Refresh needed"}</span>
+        <span>${changeText}</span>
       </div>
       ${stockTrendSvg(stock)}
       <section class="stocks-risk-card stock-about">
@@ -2375,10 +2402,10 @@ function renderStockDetail() {
       </section>
       <h3 class="stocks-kicker">MARKET STATS</h3>
       <section class="market-stats">
-        <div><b>DAY LOW</b><strong>${peso.format(stock.price * 0.97)}</strong></div>
-        <div class="green"><b>DAY HIGH</b><strong>${peso.format(stock.price * 1.04)}</strong></div>
+        <div><b>DAY LOW</b><strong>${hasPrice ? peso.format(stock.price * 0.97) : "Refresh needed"}</strong></div>
+        <div class="green"><b>DAY HIGH</b><strong>${hasPrice ? peso.format(stock.price * 1.04) : "Refresh needed"}</strong></div>
         <div><b>OWNED</b><strong>${shares.toFixed(stock.type === "stock" ? 4 : 8)} ${unitsText}</strong></div>
-        <div class="green"><b>VALUE</b><strong>${peso.format(shares * stock.price)}</strong></div>
+        <div class="green"><b>VALUE</b><strong>${valueText}</strong></div>
       </section>
       <div class="stocks-actions sticky">
         <button onclick="openStockTrade('${stock.symbol}', 'buy')" type="button">+ Buy</button>
@@ -2392,7 +2419,8 @@ function renderStockTrade() {
   const stock = stockBySymbol(state.selectedStock);
   const side = state.stockTradeSide || "buy";
   const owned = Number(state.stockHoldings?.[stock.symbol] || 0);
-  const ownedValue = owned * stock.price;
+  const hasPrice = Number.isFinite(stock.price);
+  const ownedValue = hasPrice ? owned * stock.price : 0;
   const unitPrecision = stock.type === "stock" ? 4 : 8;
   return `
     <section class="stocks-page">
@@ -2417,9 +2445,9 @@ function renderStockTrade() {
             <span>Get (estimate)</span>
             <strong id="tradeEstimate">0 ${stock.symbol}</strong>
           </div>
-          <p class="muted">${stock.type === "stock" ? "Stock orders use the latest available quote and are simulated for this prototype." : "Crypto orders use the latest available quote and are simulated for this prototype."} Price: ${peso.format(stock.price)} per ${stock.unitSingular}. You own ${owned.toFixed(unitPrecision)} ${assetUnit(stock, owned)} (${peso.format(ownedValue)}).</p>
+          <p class="muted">${hasPrice ? `${stock.type === "stock" ? "Stock orders use the latest available quote and are simulated for this prototype." : "Crypto orders use the latest available quote and are simulated for this prototype."} Price: ${peso.format(stock.price)} per ${stock.unitSingular}. You own ${owned.toFixed(unitPrecision)} ${assetUnit(stock, owned)} (${peso.format(ownedValue)}).` : "Refresh prices before trading this asset. If refresh fails, try again in a bit."}</p>
         </section>
-        <button class="stocks-bottom-btn" type="submit">${side === "buy" ? "Buy" : "Sell"} ${stock.symbol}</button>
+        <button class="stocks-bottom-btn${hasPrice ? "" : " disabled"}" ${hasPrice ? "" : "disabled"} type="submit">${side === "buy" ? "Buy" : "Sell"} ${stock.symbol}</button>
       </form>
     </section>
   `;
