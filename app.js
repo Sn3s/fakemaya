@@ -845,7 +845,7 @@ function renderCredit() {
         <span class="label-pill">MAYA EASY CREDIT</span>
         <h1>Extra budget?</h1>
         <p class="muted">Get up to ₱50,000 in seconds with Maya Easy Credit</p>
-        <button class="apply-btn" onclick="setCreditView('promo')">Apply now</button>
+        <button class="apply-btn" onclick="setCreditView('form')">Apply now</button>
         <div class="center-copy">Credit approval is based on your eligibility</div>
       </section>
       <section class="panel help-card">🤔 <b>Need help?</b><br><span class="muted">Visit our <span class="green-link">Help Center</span> to learn more</span></section>
@@ -904,7 +904,7 @@ function renderCreditPromo() {
         </div>
       </div>
       <div class="fixed-bottom-action-container">
-        <button class="apply-btn solid-white" onclick="setCreditView('privacy')">Apply Now</button>
+        <button class="apply-btn solid-white" onclick="setCreditView('form')">Apply Now</button>
       </div>
     </section>
   `;
@@ -935,27 +935,22 @@ function renderCreditForm() {
   const account = currentAccount();
   
   const isBillingSet = form.billingDay !== null && form.billingDay !== undefined;
-  const isPersonalValid = form.gender && form.maritalStatus && String(form.altMobile).trim().length > 0;
-  const isMotherValid = String(form.motherFirst).trim().length > 0 && 
-                        (form.noMiddleName || String(form.motherMiddle).trim().length > 0) && 
-                        String(form.motherLast).trim().length > 0;
-                        
-  const isFormComplete = isBillingSet && isPersonalValid && isMotherValid;
+  const isFormComplete = isCreditFormComplete(form);
 
   return `
     <section class="credit-flow-page white-theme">
       <div class="form-top-bar">
-        <button class="back-btn-dark" onclick="setCreditView('privacy')">‹</button>
+        <button class="back-btn-dark" onclick="setCreditView('home')">‹</button>
         <div class="form-progress-bar-wrapper">
-          <div class="form-progress-bar-fill" style="width: 50%;"></div>
+          <div class="form-progress-bar-fill" style="width: 100%;"></div>
         </div>
-        <span class="form-step-indicator">1/2</span>
+        <span class="form-step-indicator">1/1</span>
       </div>
 
       <div class="scrollable-flow-body input-form-layout" id="creditFormScrollBody">
         <div class="form-intro-block">
-          <h1>Set Up your credit</h1>
-          <p class="muted">To enjoy Maya Easy Credit, please provide the following information:</p>
+          <h1>Set up your credit</h1>
+          <p class="muted">Confirm the key details needed to activate Maya Easy Credit.</p>
         </div>
 
         <div class="credit-input-form">
@@ -973,53 +968,9 @@ function renderCreditForm() {
             <input type="text" value="${escapeHTML(account?.email || "")}" disabled class="disabled-email-input" />
           </div>
 
-          <div class="form-section-title">PERSONAL DETAILS</div>
-          
           <div class="form-group">
-            <label>Gender</label>
-            <select onchange="handleFormSelect('gender', this.value)">
-              <option value="" ${!form.gender ? 'selected' : ''} disabled>Select Gender</option>
-              <option value="Male" ${form.gender === 'Male' ? 'selected' : ''}>Male</option>
-              <option value="Female" ${form.gender === 'Female' ? 'selected' : ''}>Female</option>
-              <option value="Other" ${form.gender === 'Other' ? 'selected' : ''}>Other</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Marital status</label>
-            <select onchange="handleFormSelect('maritalStatus', this.value)">
-              <option value="" ${!form.maritalStatus ? 'selected' : ''} disabled>Select Marital Status</option>
-              <option value="Single" ${form.maritalStatus === 'Single' ? 'selected' : ''}>Single</option>
-              <option value="Married" ${form.maritalStatus === 'Married' ? 'selected' : ''}>Married</option>
-              <option value="Divorced" ${form.maritalStatus === 'Divorced' ? 'selected' : ''}>Divorced</option>
-              <option value="Widowed" ${form.maritalStatus === 'Widowed' ? 'selected' : ''}>Widowed</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>Alternative mobile number</label>
+            <label>Mobile number</label>
             <input type="tel" data-field="altMobile" placeholder="e.g. 09123456789" value="${form.altMobile || ''}" oninput="handleFormInput(event)" />
-          </div>
-
-          <div class="form-section-title">MOTHERS MAIDEN NAME</div>
-          
-          <div class="form-group">
-            <label>Mothers maiden first name</label>
-            <input type="text" data-field="motherFirst" placeholder="Enter first name" value="${form.motherFirst || ''}" oninput="handleFormInput(event)" />
-          </div>
-
-          <div class="form-group">
-            <label>Mothers maiden middle name</label>
-            <input type="text" id="motherMiddleInput" data-field="motherMiddle" placeholder="Enter middle name" ${form.noMiddleName ? 'disabled' : ''} value="${form.motherMiddle || ''}" oninput="handleFormInput(event)" />
-            <div class="checkbox-container">
-              <input type="checkbox" id="noMiddleNameCheck" ${form.noMiddleName ? 'checked' : ''} onchange="handleFormCheckbox(this.checked)" />
-              <label for="noMiddleNameCheck">No legal middle name</label>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Mothers maiden last name</label>
-            <input type="text" data-field="motherLast" placeholder="Enter last name" value="${form.motherLast || ''}" oninput="handleFormInput(event)" />
           </div>
         </div>
       </div>
@@ -1033,6 +984,12 @@ function renderCreditForm() {
   `;
 }
 
+function isCreditFormComplete(form = state.creditForm || {}) {
+  const hasBillingDay = form.billingDay !== null && form.billingDay !== undefined;
+  const hasMobile = String(form.altMobile || "").trim().length > 0;
+  return hasBillingDay && hasMobile;
+}
+
 /* Event handling functions to fix input focus loss bugs */
 function handleFormInput(e) {
   const field = e.target.getAttribute('data-field');
@@ -1040,13 +997,7 @@ function handleFormInput(e) {
   saveState();
   
   // Recalculate and update the button styling without rerendering the DOM
-  const form = state.creditForm;
-  const isBillingSet = form.billingDay !== null && form.billingDay !== undefined;
-  const isPersonalValid = form.gender && form.maritalStatus && String(form.altMobile).trim().length > 0;
-  const isMotherValid = String(form.motherFirst).trim().length > 0 && 
-                        (form.noMiddleName || String(form.motherMiddle).trim().length > 0) && 
-                        String(form.motherLast).trim().length > 0;
-  const isFormComplete = isBillingSet && isPersonalValid && isMotherValid;
+  const isFormComplete = isCreditFormComplete(state.creditForm);
   
   const submitBtn = document.querySelector("#creditSubmitBtn");
   if (submitBtn) {
@@ -1132,7 +1083,10 @@ function saveConfirmedBillingDate(day) {
 }
 
 function submitCreditApplication() {
-  toast("Credit Approved Intelligently!");
+  if (!isCreditFormComplete(state.creditForm)) {
+    return toast("Complete your billing date and mobile number");
+  }
+  toast("Credit approved. You can now use Maya Easy Credit.");
   state.creditView = "approved"; // Advances directly to the dashboard feature
   saveState();
   render();
