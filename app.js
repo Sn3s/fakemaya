@@ -49,6 +49,21 @@ const defaultState = {
   transactions: [
     { title: "Account opened", detail: "Welcome wallet funds", amount: "+ ₱1,000.00", createdAt: new Date().toISOString() },
   ],
+  // Existing accounts are not forced back into setup. New accounts explicitly
+  // start with this set to false in createFreshAccountState().
+  onboarding: {
+    completed: true,
+    step: 1,
+    profile: {
+      incomeType: "",
+      incomeSchedule: "",
+      usualPayday: "",
+      monthlyIncomeFloor: "",
+      billDueDatePattern: "",
+    },
+  },
+  financialProfile: null,
+  incomeEvents: [],
   
   // Credit Journey State Properties
   creditView: "home", // home, promo, privacy, form, approved
@@ -133,6 +148,28 @@ function cloneDefaultState() {
     : JSON.parse(JSON.stringify(defaultState));
 }
 
+function emptyFinancialProfile() {
+  return {
+    incomeType: "",
+    incomeSchedule: "",
+    usualPayday: "",
+    monthlyIncomeFloor: "",
+    billDueDatePattern: "",
+  };
+}
+
+function createFreshAccountState(email) {
+  const freshState = seedPersonalGoalsForEmail(cloneDefaultState(), email);
+  freshState.onboarding = {
+    completed: false,
+    step: 1,
+    profile: emptyFinancialProfile(),
+  };
+  freshState.financialProfile = null;
+  freshState.incomeEvents = [];
+  return freshState;
+}
+
 function defaultPersonalGoal(template, existing = {}) {
   return {
     ...template,
@@ -188,6 +225,19 @@ function normalizeState(appState = cloneDefaultState()) {
   normalized.goal = personalGoals.goal;
   normalized.marketPrices = normalized.marketPrices && typeof normalized.marketPrices === "object" ? normalized.marketPrices : {};
   normalized.marketPriceError = normalized.marketPriceError || null;
+  const storedOnboarding = appState.onboarding && typeof appState.onboarding === "object" ? appState.onboarding : {};
+  normalized.onboarding = {
+    ...cloneDefaultState().onboarding,
+    ...storedOnboarding,
+    profile: {
+      ...emptyFinancialProfile(),
+      ...(storedOnboarding.profile || {}),
+    },
+  };
+  normalized.financialProfile = appState.financialProfile && typeof appState.financialProfile === "object"
+    ? { ...emptyFinancialProfile(), ...appState.financialProfile }
+    : null;
+  normalized.incomeEvents = Array.isArray(appState.incomeEvents) ? appState.incomeEvents : [];
   return normalized;
 }
 
@@ -325,7 +375,7 @@ async function loadWalletState(user) {
     };
   }
 
-  const freshState = seedPersonalGoalsForEmail(cloneDefaultState(), user.email);
+  const freshState = createFreshAccountState(user.email);
   await persistWalletState(user, freshState);
   return freshState;
 }
@@ -494,6 +544,153 @@ function renderSignup() {
       <button class="create-account-btn quiet" onclick="setAuthMode('signin')" type="button">Already have an account? Sign in</button>
     </section>
   `;
+}
+
+function onboardingProfile() {
+  return state.onboarding?.profile || emptyFinancialProfile();
+}
+
+function onboardingChoice(field, value, label, description = "") {
+  const selected = onboardingProfile()[field] === value;
+  return `
+    <button class="onboarding-choice ${selected ? "selected" : ""}" type="button" onclick="setOnboardingField('${field}', '${value}')">
+      <span><b>${label}</b>${description ? `<small>${description}</small>` : ""}</span>
+      <span class="choice-check" aria-hidden="true">${selected ? "✓" : ""}</span>
+    </button>
+  `;
+}
+
+function renderOnboarding() {
+  const onboarding = state.onboarding || { step: 1, profile: emptyFinancialProfile() };
+  const profile = onboardingProfile();
+  const step = Number(onboarding.step || 1);
+  const incomeTypes = {
+    fixed: ["Fixed income", "Mostly the same amount each pay period"],
+    variable: ["Variable income", "Freelance, side hustles, commissions, or changing amounts"],
+    mixed: ["Both", "A regular income plus variable or extra income"],
+  };
+  const schedules = {
+    weekly: ["Weekly", ""],
+    twiceMonthly: ["Twice a month", "For example, every 15th and 30th"],
+    monthly: ["Monthly", ""],
+    irregular: ["Irregular", "Income arrives on different dates and in different amounts"],
+  };
+
+  let body = "";
+  if (step === 1) {
+    body = `
+      <p class="onboarding-eyebrow">INCOME PROFILE</p>
+      <h1>How does money usually come in?</h1>
+      <p class="onboarding-copy">Choose the option that best reflects your income today. You can change this later.</p>
+      <div class="onboarding-choices">
+        ${Object.entries(incomeTypes).map(([value, [label, description]]) => onboardingChoice("incomeType", value, label, description)).join("")}
+      </div>
+    `;
+  } else if (step === 2) {
+    const isIrregular = profile.incomeSchedule === "irregular";
+    const showFloor = profile.incomeType === "variable" || profile.incomeType === "mixed";
+    body = `
+      <p class="onboarding-eyebrow">INCOME TIMING</p>
+      <h1>When do you usually receive income?</h1>
+      <p class="onboarding-copy">This helps us present your cash-flow plan. It does not move money automatically.</p>
+      <div class="onboarding-choices compact">
+        ${Object.entries(schedules).map(([value, [label, description]]) => onboardingChoice("incomeSchedule", value, label, description)).join("")}
+      </div>
+      ${isIrregular ? `
+        <section class="onboarding-helper">
+          <b>No future payment dates needed</b>
+          <p>Record income when you receive it. Your plan will update from money actually received.</p>
+        </section>
+      ` : profile.incomeSchedule ? `
+        <label class="onboarding-field">Usual payday <span>Optional</span>
+          <input type="text" maxlength="60" placeholder="e.g. Every Friday or 15th and 30th" value="${escapeHTML(profile.usualPayday)}" oninput="setOnboardingTextField('usualPayday', this.value)" />
+        </label>
+      ` : ""}
+      ${showFloor ? `
+        <label class="onboarding-field">Minimum amount you can usually rely on each month <span>Optional</span>
+          <input type="number" min="0" step="1" inputmode="decimal" placeholder="₱0" value="${escapeHTML(profile.monthlyIncomeFloor)}" oninput="setOnboardingTextField('monthlyIncomeFloor', this.value)" />
+        </label>
+        <p class="field-note">This is used for cautious planning only. It is never counted as money in your wallet.</p>
+      ` : ""}
+    `;
+  } else {
+    body = `
+      <p class="onboarding-eyebrow">BILLS</p>
+      <h1>How predictable are your regular bill due dates?</h1>
+      <p class="onboarding-copy">This refers to bills, not income. You can add exact bill dates later.</p>
+      <div class="onboarding-choices">
+        ${onboardingChoice("billDueDatePattern", "predictable", "Mostly predictable", "Most bills follow the same due date each month")}
+        ${onboardingChoice("billDueDatePattern", "varied", "Different dates each month", "Your due dates are spread across the month")}
+        ${onboardingChoice("billDueDatePattern", "addLater", "I will add them later", "Continue without entering bill dates now")}
+      </div>
+      <section class="onboarding-helper">
+        <b>Unexpected expenses are separate</b>
+        <p>They are not treated as scheduled bills and can be recorded when they happen.</p>
+      </section>
+    `;
+  }
+
+  const canContinue = step === 1
+    ? Boolean(profile.incomeType)
+    : step === 2
+      ? Boolean(profile.incomeSchedule)
+      : Boolean(profile.billDueDatePattern);
+  const action = step === 3 ? "Finish setup" : "Continue";
+
+  return `
+    <section class="onboarding-page">
+      <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
+      <div class="onboarding-head">
+        ${step > 1 ? `<button class="back" onclick="moveOnboarding(-1)" aria-label="Back">‹</button>` : "<span></span>"}
+        <b>${step} of 3</b>
+      </div>
+      <div class="onboarding-progress"><span style="width:${(step / 3) * 100}%"></span></div>
+      <div class="onboarding-body">${body}</div>
+      <button class="onboarding-primary" type="button" ${canContinue ? "" : "disabled"} onclick="advanceOnboarding()">${action}</button>
+    </section>
+  `;
+}
+
+function setOnboardingField(field, value) {
+  state.onboarding.profile = { ...onboardingProfile(), [field]: value };
+  saveState();
+  render();
+}
+
+function setOnboardingTextField(field, value) {
+  state.onboarding.profile = { ...onboardingProfile(), [field]: value };
+  saveState();
+}
+
+function moveOnboarding(delta) {
+  state.onboarding.step = Math.min(3, Math.max(1, Number(state.onboarding.step || 1) + delta));
+  saveState();
+  render();
+}
+
+function advanceOnboarding() {
+  const profile = onboardingProfile();
+  const step = Number(state.onboarding.step || 1);
+  if (step === 1 && !profile.incomeType) return toast("Choose an income type");
+  if (step === 2 && !profile.incomeSchedule) return toast("Choose an income timing");
+  if (step === 3 && !profile.billDueDatePattern) return toast("Choose a bill due-date pattern");
+  if (step < 3) return moveOnboarding(1);
+
+  state.financialProfile = { ...profile };
+  state.onboarding = { ...state.onboarding, completed: true, step: 3 };
+  saveState();
+  render();
+  toast("Cash-flow setup complete");
+}
+
+function startFinancialSetup() {
+  state.onboarding = {
+    completed: false,
+    step: 1,
+    profile: { ...emptyFinancialProfile(), ...(state.financialProfile || {}) },
+  };
+  saveState();
+  render();
 }
 
 function saveState() {
@@ -817,6 +1014,54 @@ function walletServicesGrid() {
   `;
 }
 
+function incomeReceivedThisMonth() {
+  const now = new Date();
+  return (state.incomeEvents || []).reduce((total, event) => {
+    const receivedDate = new Date(`${event.date || ""}T00:00:00`);
+    const sameMonth = !Number.isNaN(receivedDate.getTime())
+      && receivedDate.getFullYear() === now.getFullYear()
+      && receivedDate.getMonth() === now.getMonth();
+    return sameMonth ? total + Number(event.amount || 0) : total;
+  }, 0);
+}
+
+function incomeTypeLabel(value) {
+  return ({ fixed: "Fixed income", variable: "Variable income", mixed: "Mixed income" })[value] || "Income profile";
+}
+
+function incomeScheduleLabel(value) {
+  return ({ weekly: "Weekly", twiceMonthly: "Twice a month", monthly: "Monthly", irregular: "Irregular" })[value] || "";
+}
+
+function cashFlowCard() {
+  const profile = state.financialProfile;
+  if (!profile) {
+    return `
+      <section class="cash-flow-card setup" aria-label="Set up cash-flow profile">
+        <div><span class="cash-flow-kicker">CASH-FLOW PLAN</span><h2>Make your plan fit your income</h2><p>Add whether your income is fixed, variable, or irregular.</p></div>
+        <button class="cash-flow-action" onclick="startFinancialSetup()">Set up</button>
+      </section>
+    `;
+  }
+
+  const floor = Number(profile.monthlyIncomeFloor || 0);
+  return `
+    <section class="cash-flow-card" aria-label="Cash-flow plan">
+      <div class="cash-flow-heading">
+        <div><span class="cash-flow-kicker">CASH-FLOW PLAN</span><h2>${incomeTypeLabel(profile.incomeType)} <span>·</span> ${incomeScheduleLabel(profile.incomeSchedule)}</h2></div>
+        <button class="cash-flow-edit" onclick="startFinancialSetup()">Edit</button>
+      </div>
+      <p class="cash-flow-copy">Plan from money you have received—not expected income.</p>
+      <div class="cash-flow-stats">
+        <div><span>Received this month</span><b>${money(incomeReceivedThisMonth())}</b></div>
+        <div><span>Available in wallet</span><b>${money(state.wallet)}</b></div>
+      </div>
+      ${floor > 0 ? `<p class="cash-flow-floor">Planning amount: ${peso.format(floor)}/month <span>Not wallet cash</span></p>` : ""}
+      <button class="cash-flow-action wide" onclick="openMoneySheet('income')">+ Add income received</button>
+    </section>
+  `;
+}
+
 function renderWallet() {
   // Calculate if any loan capital is actively sitting in the wallet
   let loanCapitalInWallet = 0;
@@ -855,7 +1100,7 @@ function renderWallet() {
         </div>
       </section>
     ` : ""}
-    
+    ${cashFlowCard()}
     ${walletServicesGrid()}
     ${transactionsPanel()}
   `;
@@ -2076,6 +2321,7 @@ function openMoneySheet(kind) {
     || fallbackPersonalGoal();
   const labels = {
     cashin: ["Cash in", "Add money to your wallet"],
+    income: ["Add income received", "Record money you have actually received. Your cash-flow plan will update from this entry."],
     send: ["Send money", "Simulate sending money from your wallet. This will be recorded as an expense."],
     deposit: ["Deposit", "Move wallet money to My Savings"],
     transfer: ["Transfer", "Move savings money to your wallet"],
@@ -2103,6 +2349,14 @@ function openMoneySheet(kind) {
           <input id="cashInSourceInput" type="text" placeholder="Bank or Maya Number where the cash in came from" autocomplete="off" maxlength="100" />
         </label>
       ` : ""}
+      ${kind === "income" ? `
+        <label class="field">Income source
+          <input id="incomeSourceInput" type="text" placeholder="e.g. Freelance design project" autocomplete="off" maxlength="100" />
+        </label>
+        <label class="field">Date received
+          <input id="incomeDateInput" type="date" value="${new Date().toISOString().slice(0, 10)}" />
+        </label>
+      ` : ""}
       <div class="sheet-actions">
         <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
         <button class="pill-btn solid" onclick="submitMoney('${kind}')">Continue</button>
@@ -2124,6 +2378,23 @@ function submitMoney(kind) {
     if (!source) return toast("Enter the bank or Maya number the cash in came from");
     state.wallet += amount;
     addTransaction("Cash in", `From: ${source}`, `+ ${peso.format(amount)}`);
+  }
+  if (kind === "income") {
+    const source = document.querySelector("#incomeSourceInput")?.value.trim() || "";
+    const date = document.querySelector("#incomeDateInput")?.value || "";
+    if (!source) return toast("Enter an income source");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(new Date(`${date}T00:00:00`).getTime())) {
+      return toast("Enter a valid date received");
+    }
+    state.wallet += amount;
+    state.incomeEvents = [{
+      id: `income-${Date.now()}`,
+      source,
+      amount,
+      date,
+      createdAt: new Date().toISOString(),
+    }, ...(state.incomeEvents || [])];
+    addTransaction("Income received", source, `+ ${peso.format(amount)}`);
   }
   if (kind === "send") {
     const recipient = document.querySelector("#recipientInput")?.value.trim() || "";
@@ -2163,7 +2434,7 @@ function submitMoney(kind) {
   saveState();
   closeModal();
   render();
-  toast(kind === "send" ? `${peso.format(amount)} simulated send recorded` : `${peso.format(amount)} processed`);
+  toast(kind === "send" ? `${peso.format(amount)} simulated send recorded` : kind === "income" ? `${peso.format(amount)} income recorded` : `${peso.format(amount)} processed`);
 }
 
 function stockBySymbol(symbol) {
@@ -2567,6 +2838,11 @@ function render() {
 
   if (!session?.user) {
     app.innerHTML = renderLogin();
+    return;
+  }
+
+  if (state.onboarding?.completed === false) {
+    app.innerHTML = renderOnboarding();
     return;
   }
 
