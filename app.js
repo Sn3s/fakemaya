@@ -88,6 +88,17 @@ const defaultState = {
 let session = null;
 let state = cloneDefaultState();
 let booting = true;
+// The wallet row can change outside this tab (other sessions, API clients).
+// This tab only saves if the row is still the version it last loaded or saved
+// (compare-and-swap on updated_at); otherwise it reloads instead of
+// overwriting the newer data.
+let remoteUpdatedAt = null;
+// Bumped whenever state is replaced from the server, so saves queued against
+// an older snapshot are dropped instead of written.
+let stateGeneration = 0;
+let saveQueue = Promise.resolve();
+// UI-only fields kept when balances are reloaded underneath the user.
+const LOCAL_UI_KEYS = ["tab", "view", "hidden", "creditView", "loanView", "depositFlow", "stocksFlow"];
 let authMode = "signin";
 let authSubmitting = false;
 const app = document.querySelector("#app");
@@ -294,14 +305,17 @@ async function ensureSupabaseClient() {
 }
 
 async function loadWalletState(user) {
+  stateGeneration += 1;
+  remoteUpdatedAt = null;
   const client = await ensureSupabaseClient();
   if (!client || !user) return cloneDefaultState();
 
   const { data, error } = await client
     .from(WALLET_TABLE)
-    .select("app_state,wallet,savings,time_deposit,goal_balance")
+    .select("app_state,wallet,savings,time_deposit,goal_balance,updated_at")
     .eq("user_id", user.id)
     .maybeSingle();
+  remoteUpdatedAt = data?.updated_at ?? null;
 
   if (error) {
     toast(`Supabase table needed: ${WALLET_TABLE}`);
@@ -326,23 +340,84 @@ async function loadWalletState(user) {
   }
 
   const freshState = seedPersonalGoalsForEmail(cloneDefaultState(), user.email);
-  await persistWalletState(user, freshState);
+  // Written directly, not queued: this can run inside a queued reload.
+  await writeWalletState(user, freshState, stateGeneration);
   return freshState;
 }
 
-async function persistWalletState(user = session?.user, snapshot = state) {
+// Saves run one at a time so each compares against the updated_at the
+// previous save produced.
+function persistWalletState(user = session?.user, snapshot = state) {
+  const generation = stateGeneration;
+  saveQueue = saveQueue
+    .then(() => writeWalletState(user, snapshot, generation))
+    .catch((error) => toast(`Could not save to Supabase: ${error.message}`));
+  return saveQueue;
+}
+
+async function writeWalletState(user, snapshot, generation) {
+  // The snapshot predates a reload from the server, so it is stale.
+  if (generation !== stateGeneration) return;
   const client = await ensureSupabaseClient();
   if (!client || !user) return;
   const previousState = state;
   state = snapshot;
-  const { error } = await client
-    .from(WALLET_TABLE)
-    .upsert(walletRowPayload(user), { onConflict: "user_id" });
+  const payload = walletRowPayload(user);
   state = previousState;
+
+  const { data, error } = remoteUpdatedAt
+    ? await client
+      .from(WALLET_TABLE)
+      .update(payload)
+      .eq("user_id", user.id)
+      .eq("updated_at", remoteUpdatedAt)
+      .select("updated_at")
+    : await client
+      .from(WALLET_TABLE)
+      .upsert(payload, { onConflict: "user_id" })
+      .select("updated_at");
   if (error) {
     toast(`Could not save to Supabase: ${error.message}`);
+    return;
   }
+  if (!data?.length) {
+    // The row changed since this tab loaded it; the server copy wins.
+    await reloadFromServer(user);
+    return;
+  }
+  remoteUpdatedAt = data[0].updated_at;
 }
+
+// Replaces balances with the server copy while keeping where the user is.
+async function reloadFromServer(user = session?.user) {
+  if (!user) return;
+  const ui = Object.fromEntries(LOCAL_UI_KEYS.map((key) => [key, state[key]]));
+  state = normalizeState({ ...(await loadWalletState(user)), ...ui });
+  render();
+}
+
+// Pick up outside changes when the user comes back to this tab. Queued behind
+// pending saves so a save never races the check.
+function refreshIfChangedRemotely() {
+  const user = session?.user;
+  if (booting || !user) return;
+  saveQueue = saveQueue.then(async () => {
+    const client = await ensureSupabaseClient();
+    if (!client || session?.user?.id !== user.id) return;
+    const { data, error } = await client
+      .from(WALLET_TABLE)
+      .select("updated_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error || !data || data.updated_at === remoteUpdatedAt) return;
+    await reloadFromServer(user);
+  }).catch(() => {});
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshIfChangedRemotely();
+});
+window.addEventListener("focus", refreshIfChangedRemotely);
 
 async function signInWithEmail(event) {
   event.preventDefault();
