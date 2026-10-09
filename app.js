@@ -151,6 +151,11 @@ function defaultPersonalGoal(template, existing = {}) {
     target: Number(existing.target ?? 25000),
     daysLeft: Number(existing.daysLeft ?? 180),
     rate: Number(existing.rate ?? 8),
+    // Personal Lifestyle Fund only: one sub-bucket per Shellby A29 activity,
+    // created and funded from Shellby. Separate from this bucket's balance.
+    ...(Array.isArray(existing.subBuckets) && existing.subBuckets.length
+      ? { subBuckets: existing.subBuckets }
+      : {}),
   };
 }
 
@@ -206,8 +211,12 @@ function fallbackPersonalGoal() {
   return defaultPersonalGoal(personalGoalTemplates[0]);
 }
 
+function subBucketsBalance(goal) {
+  return (goal?.subBuckets || []).reduce((total, sub) => total + Number(sub.balance || 0), 0);
+}
+
 function totalPersonalGoalsBalance() {
-  return (state.personalGoals || []).reduce((total, goal) => total + Number(goal.balance || 0), 0);
+  return (state.personalGoals || []).reduce((total, goal) => total + Number(goal.balance || 0) + subBucketsBalance(goal), 0);
 }
 
 function accountKey(email) {
@@ -699,7 +708,7 @@ function deletePersonalGoal(goalId) {
     return;
   }
 
-  const balance = Number(goal.balance || 0);
+  const balance = Number(goal.balance || 0) + subBucketsBalance(goal);
   if (balance > 0) {
     state.wallet += balance;
     addTransaction("Transferred from goal", `${goal.name} deleted`, `+ ${peso.format(balance)}`);
@@ -945,6 +954,13 @@ function walletBreakdownRows() {
       label: `${goal.emoji} Savings – ${escapeHTML(goal.name)}`,
       amount: goal.balance,
       action: `openSavingsGoal('${goal.id}')`,
+    });
+    (goal.subBuckets || []).forEach((sub) => {
+      rows.push({
+        label: `↳ ${escapeHTML(goal.name)} – ${escapeHTML(sub.name)}`,
+        amount: sub.balance,
+        action: `openSavingsGoal('${goal.id}')`,
+      });
     });
   });
   if (Object.values(state.stockHoldings || {}).some(Number)) {
@@ -1986,6 +2002,7 @@ function renderGoalDetail() {
         <b>Up to ${goal.rate}% p.a. for goals up to ₱100,000 ⓘ</b>
       </section>
       <button class="wide-deposit" onclick="openMoneySheet('goalDeposit')">${icon("in")} Deposit</button>
+      ${subBucketCards(goal)}
       <section class="goal-boost"><b>🐷 Give your goal a boost!</b><span class="white-pill">up to 8% p.a. ›</span></section>
       <h3 class="muted" style="letter-spacing:3px">GOAL SETTINGS</h3>
       <section class="settings-card">
@@ -1993,6 +2010,39 @@ function renderGoalDetail() {
         <button class="list-row danger-row" onclick="openDeleteGoalSheet('${goal.id}')"><span class="left-stack"><span>🗑</span><b>Delete bucket</b></span><span class="muted">›</span></button>
       </section>
       ${transactionsPanel()}
+    </section>
+  `;
+}
+
+function daysUntil(dateValue) {
+  const deadline = new Date(dateValue);
+  if (Number.isNaN(deadline.getTime())) return null;
+  return Math.ceil((deadline.getTime() - Date.now()) / 86400000);
+}
+
+// One card per Shellby A29 hobby/activity. Money only moves in from the
+// Lifestyle Fund (via Shellby's "Transfer from Lifestyle Fund").
+function subBucketCards(goal) {
+  const subs = goal?.subBuckets || [];
+  if (!subs.length) return "";
+  return `
+    <h3 class="muted" style="letter-spacing:3px">LIFESTYLE EVENTS</h3>
+    <section class="sub-bucket-list">
+      ${subs.map((sub) => {
+        const balance = Number(sub.balance || 0);
+        const target = Number(sub.target || 0);
+        const pct = target > 0 ? Math.min(100, Math.round((balance / target) * 100)) : 0;
+        const days = daysUntil(sub.deadline);
+        const daysText = days === null ? "" : days > 0 ? `${days} day${days === 1 ? "" : "s"} remaining!` : "Target date reached";
+        return `
+          <article class="sub-bucket-card">
+            <div class="sub-bucket-head"><b>${escapeHTML(sub.name)}</b>${daysText ? `<span class="sub-bucket-days">${daysText}</span>` : ""}</div>
+            <div class="sub-bucket-balance">${money(balance)}</div>
+            <div class="muted">Available balance · out of ${peso.format(target)}</div>
+            <div class="progress" style="--p:${pct}%"><span></span></div>
+          </article>
+        `;
+      }).join("")}
     </section>
   `;
 }

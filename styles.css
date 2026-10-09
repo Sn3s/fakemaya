@@ -2657,3 +2657,41 @@ button {
   font-weight: 800;
   cursor: pointer;
 }
+
+/* Personal Lifestyle Fund sub-buckets (one card per Shellby A29 activity) */
+.sub-bucket-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.sub-bucket-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.sub-bucket-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.sub-bucket-days {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.sub-bucket-balance {
+  margin: 8px 0 2px;
+  font-size: 26px;
+  font-weight: 900;
+}
+
+.sub-bucket-card .progress {
+  margin-top: 10px;
+}
