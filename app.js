@@ -1960,6 +1960,9 @@ function renderSavingsDetail() {
 function renderGoalDetail() {
   const goal = state.goal || state.personalGoals[0];
   const pct = goal.target > 0 ? Math.min(100, Math.round((goal.balance / goal.target) * 100)) : 0;
+  // The Personal Lifestyle Fund is spending money set aside, not a savings
+  // target, so it shows just its balance (no "out of ₱X" or %).
+  const hasTarget = goal.id !== "B4";
   return `
     <section class="detail goal">
       <div class="statusbar"><span>9:43</span><span class="signal"><span>▮▮▮</span><span>⌁</span><span class="battery">36</span></span></div>
@@ -1976,8 +1979,10 @@ function renderGoalDetail() {
       </div>
       <section class="account-summary">
         <div class="progress-row"><span></span><span class="eye">${icon("eye")}</span></div>
+        ${hasTarget ? `
         <div class="progress-row"><div><div class="balance" style="font-size:42px">${money(goal.balance)}</div><h2 class="muted">out of ${peso.format(goal.target)}</h2></div><div style="font-size:34px">${pct}%</div></div>
-        <div class="progress" style="--p:${pct}%"><span></span></div>
+        <div class="progress" style="--p:${pct}%"><span></span></div>` : `
+        <div class="progress-row"><div><div class="balance" style="font-size:42px">${money(goal.balance)}</div><h2 class="muted">Available balance</h2></div></div>`}
         <b>Up to ${goal.rate}% p.a. for goals up to ₱100,000 ⓘ</b>
       </section>
       <button class="wide-deposit" onclick="openMoneySheet('goalDeposit')">${icon("in")} Deposit</button>
