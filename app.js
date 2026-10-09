@@ -922,18 +922,62 @@ function renderWallet() {
       </section>
     ` : ""}
 
-    ${state.creditView === "approved" ? `
-      <section class="credit-summary-widget" onclick="go('credit')">
-        <div class="widget-row">
-          <span>💳 Maya Easy Credit Line Available</span>
-          <strong class="green-link">${money(state.creditLimit - state.creditUsed)}</strong>
-        </div>
-      </section>
-    ` : ""}
-    
+    ${walletBreakdownRows()}
+
     ${walletServicesGrid()}
     ${transactionsPanel()}
   `;
+}
+
+// One-line cards under the Wallet balance showing where the rest of the
+// account's money sits. Only accounts that apply to this user are listed;
+// tapping a row opens that account.
+function walletBreakdownRows() {
+  const rows = [];
+  if (Number(state.savings || 0) > 0) {
+    rows.push({ label: "🐷 Savings – My Savings", amount: state.savings, action: "openSavingsAccount('mySavings')" });
+  }
+  if (Number(state.timeDeposit || 0) > 0) {
+    rows.push({ label: "🏦 Savings – Time Deposit", amount: state.timeDeposit, action: "go('savings')" });
+  }
+  (state.personalGoals || []).forEach((goal) => {
+    rows.push({
+      label: `${goal.emoji} Savings – ${escapeHTML(goal.name)}`,
+      amount: goal.balance,
+      action: `openSavingsGoal('${goal.id}')`,
+    });
+  });
+  if (Object.values(state.stockHoldings || {}).some(Number)) {
+    rows.push({
+      label: "📊 Crypto – Holdings value",
+      amount: stockPortfolioValue(),
+      text: hasPricedHolding() ? null : "Refresh needed",
+      action: "openStocks()",
+    });
+  }
+  if (state.creditView === "approved") {
+    rows.push({ label: "💳 Credit – Available", amount: state.creditLimit - state.creditUsed, action: "go('credit')" });
+  }
+  if (!rows.length) return "";
+  return `
+    <section class="wallet-breakdown" aria-label="Balance breakdown">
+      ${rows.map((row) => `
+        <button class="wallet-breakdown-row" onclick="${row.action}" type="button">
+          <span>${row.label}</span>
+          <strong>${row.text || money(row.amount)} <span class="muted">›</span></strong>
+        </button>
+      `).join("")}
+    </section>
+  `;
+}
+
+function openSavingsAccount(view) {
+  setState({ tab: "savings", view });
+}
+
+function openSavingsGoal(goalId) {
+  state.tab = "savings";
+  openGoal(goalId);
 }
 
 function renderSavings() {
@@ -1931,7 +1975,7 @@ function renderGoalDetail() {
         <div class="account-num">${goal.account} <button onclick="toast('Goal account copied')" class="back" style="font-size:18px">${icon("copy")}</button></div>
       </div>
       <section class="account-summary">
-        <div class="progress-row"><b class="muted">${goal.daysLeft} DAYS LEFT</b><span class="eye">${icon("eye")}</span></div>
+        <div class="progress-row"><span></span><span class="eye">${icon("eye")}</span></div>
         <div class="progress-row"><div><div class="balance" style="font-size:42px">${money(goal.balance)}</div><h2 class="muted">out of ${peso.format(goal.target)}</h2></div><div style="font-size:34px">${pct}%</div></div>
         <div class="progress" style="--p:${pct}%"><span></span></div>
         <b>Up to ${goal.rate}% p.a. for goals up to ₱100,000 ⓘ</b>
@@ -2255,6 +2299,33 @@ function stockBySymbol(symbol) {
   };
 }
 
+// The Investment Fund (B3) holds the money set aside to invest, so crypto and
+// stock buys draw from it and sell proceeds return to it. Accounts without an
+// Investment Fund keep trading from the wallet.
+const INVESTMENT_FUND_ID = "B3";
+
+function investmentFundGoal() {
+  return (state.personalGoals || []).find((goal) => goal.id === INVESTMENT_FUND_ID) || null;
+}
+
+function tradeFundingSource() {
+  const fund = investmentFundGoal();
+  return fund
+    ? { label: fund.name, detail: `From ${fund.name}`, balance: Number(fund.balance || 0), isFund: true }
+    : { label: "My Wallet", detail: "From My Wallet", balance: Number(state.wallet || 0), isFund: false };
+}
+
+function adjustTradeFunding(delta) {
+  const fund = investmentFundGoal();
+  if (!fund) {
+    state.wallet += delta;
+    return;
+  }
+  state.personalGoals = state.personalGoals.map((goal) => goal.id === fund.id
+    ? { ...goal, balance: Number((Number(goal.balance || 0) + delta).toFixed(2)) }
+    : goal);
+}
+
 function stockPortfolioValue() {
   return stocksCatalog.reduce((total, asset) => {
     const liveAsset = stockBySymbol(asset.symbol);
@@ -2325,21 +2396,22 @@ function submitStockTrade(event) {
   }
 
   const units = Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
+  const source = tradeFundingSource();
   if (side === "buy") {
-    if (amount > state.wallet) return toast("Insufficient wallet balance");
-    state.wallet -= amount;
+    if (amount > source.balance) return toast(`Insufficient ${source.label} balance`);
+    adjustTradeFunding(-amount);
     state.stockHoldings[stock.symbol] = Number((Number(state.stockHoldings[stock.symbol] || 0) + units).toFixed(8));
     addStockTransaction("Bought", stock, units, amount);
-    addTransaction(`Bought ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol})`, `- ${peso.format(amount)}`);
+    addTransaction(`Bought ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol}) · ${source.detail}`, `- ${peso.format(amount)}`);
   } else {
     const ownedShares = Number(state.stockHoldings[stock.symbol] || 0);
     const sellUnits = Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
     if (!ownedShares) return toast(`You do not own this ${assetClassLabel(stock)} yet`);
     if (sellUnits > ownedShares + 0.00000001) return toast(`Not enough ${assetActionCopy(stock)} to sell`);
     state.stockHoldings[stock.symbol] = Number((ownedShares - sellUnits).toFixed(8));
-    state.wallet += amount;
+    adjustTradeFunding(amount);
     addStockTransaction("Sold", stock, sellUnits, amount);
-    addTransaction(`Sold ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol})`, `+ ${peso.format(amount)}`);
+    addTransaction(`Sold ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol}) · To ${source.label}`, `+ ${peso.format(amount)}`);
   }
 
   saveState();
@@ -2387,9 +2459,10 @@ function renderStocksDashboard() {
         <button onclick="refreshMarketPrices()" type="button">↻</button>
       </header>
       <section class="stocks-balance-card">
-        <span>Total investment balance</span>
+        <span>Holdings value</span>
         <strong>${balanceText}</strong>
         <small>${lastUpdated}</small>
+        <small>Available to invest (${escapeHTML(tradeFundingSource().label)}): ${money(tradeFundingSource().balance)}</small>
       </section>
       <div class="stocks-actions">
         <button onclick="openStockTrade('BTC', 'buy')" type="button">+ Buy</button>
@@ -2399,7 +2472,7 @@ function renderStocksDashboard() {
       ${holdingCount ? renderStockPortfolioRows() : `
         <section class="stocks-explore-card">
           <h2>Explore assets</h2>
-          <p>Start with Bitcoin or NVIDIA using your Maya Wallet balance.</p>
+          <p>Start with Bitcoin or NVIDIA using your ${escapeHTML(tradeFundingSource().label)} balance.</p>
           <button onclick="openStockDetail('BTC')" type="button">Buy your first crypto</button>
         </section>
       `}
@@ -2497,6 +2570,7 @@ function renderStockTrade() {
   const hasPrice = Number.isFinite(stock.price);
   const ownedValue = hasPrice ? owned * stock.price : 0;
   const unitPrecision = stock.type === "stock" ? 4 : 8;
+  const source = tradeFundingSource();
   return `
     <section class="stocks-page">
       <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
@@ -2506,8 +2580,8 @@ function renderStockTrade() {
       </header>
       <form class="stock-trade-form" onsubmit="submitStockTrade(event)">
         <section class="trade-account-card">
-          <div><span class="trade-maya-logo">m</span><b>My Wallet</b></div>
-          <strong>${money(state.wallet)}</strong>
+          <div><span class="trade-maya-logo">m</span><b>${escapeHTML(source.label)}</b></div>
+          <strong>${money(source.balance)}</strong>
           <label>
             <span>${side === "buy" ? "Spend" : "Receive"}</span>
             <input name="amount" inputmode="decimal" type="number" min="1" step="0.01" placeholder="0.00" oninput="updateTradeEstimate(this.value, '${stock.symbol}')" autofocus />

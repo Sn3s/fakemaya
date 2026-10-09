@@ -2601,3 +2601,32 @@ button {
     gap: 5px;
   }
 }
+
+/* Wallet balance breakdown (one line per account under the Wallet card) */
+.wallet-breakdown {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.wallet-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wallet-breakdown-row strong {
+  white-space: nowrap;
+}
