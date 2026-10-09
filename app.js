@@ -2300,8 +2300,8 @@ function stockBySymbol(symbol) {
 }
 
 // The Investment Fund (B3) holds the money set aside to invest, so crypto and
-// stock buys draw from it and sell proceeds return to it. Accounts without an
-// Investment Fund keep trading from the wallet.
+// stock buys draw from it. Accounts without an Investment Fund buy from the
+// wallet. Sell proceeds always go to the wallet (see confirmStockSell).
 const INVESTMENT_FUND_ID = "B3";
 
 function investmentFundGoal() {
@@ -2369,7 +2369,8 @@ function addStockTransaction(side, stock, shares, amount) {
     amount,
     createdAt: new Date().toISOString(),
   });
-  state.stockTransactions = state.stockTransactions.slice(0, 20);
+  // Shellby sums every buy for "Total Invested", so keep the full history.
+  state.stockTransactions = state.stockTransactions.slice(0, 500);
 }
 
 function assetUnit(asset, amount = 2) {
@@ -2388,35 +2389,198 @@ function submitStockTrade(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const stock = stockBySymbol(state.selectedStock);
-  const side = state.stockTradeSide || "buy";
   const amount = Number(form.amount.value || 0);
   if (!Number.isFinite(amount) || amount <= 0) return toast("Enter a valid amount");
   if (!Number.isFinite(stock.price) || stock.price <= 0) {
     return toast("Refresh prices first. Try again in a bit if refresh fails.");
   }
+  if ((state.stockTradeSide || "buy") === "sell") return openSellConfirmSheet(stock, amount);
 
   const units = Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
   const source = tradeFundingSource();
-  if (side === "buy") {
-    if (amount > source.balance) return toast(`Insufficient ${source.label} balance`);
-    adjustTradeFunding(-amount);
-    state.stockHoldings[stock.symbol] = Number((Number(state.stockHoldings[stock.symbol] || 0) + units).toFixed(8));
-    addStockTransaction("Bought", stock, units, amount);
-    addTransaction(`Bought ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol}) · ${source.detail}`, `- ${peso.format(amount)}`);
-  } else {
-    const ownedShares = Number(state.stockHoldings[stock.symbol] || 0);
-    const sellUnits = Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
-    if (!ownedShares) return toast(`You do not own this ${assetClassLabel(stock)} yet`);
-    if (sellUnits > ownedShares + 0.00000001) return toast(`Not enough ${assetActionCopy(stock)} to sell`);
-    state.stockHoldings[stock.symbol] = Number((ownedShares - sellUnits).toFixed(8));
-    adjustTradeFunding(amount);
-    addStockTransaction("Sold", stock, sellUnits, amount);
-    addTransaction(`Sold ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol}) · To ${source.label}`, `+ ${peso.format(amount)}`);
-  }
-
+  if (amount > source.balance) return toast(`Insufficient ${source.label} balance`);
+  adjustTradeFunding(-amount);
+  state.stockHoldings[stock.symbol] = Number((Number(state.stockHoldings[stock.symbol] || 0) + units).toFixed(8));
+  addStockTransaction("Bought", stock, units, amount);
+  addTransaction(`Bought ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol}) · ${source.detail}`, `- ${peso.format(amount)}`);
   saveState();
   openView("stocks");
-  toast(`${side === "buy" ? "Bought" : "Sold"} ${stock.symbol}`);
+  toast(`Bought ${stock.symbol}`);
+}
+
+/* ---- Selling holdings -------------------------------------------------- */
+
+// What is still invested in a holding (weighted-average cost), replayed from
+// the trade history oldest-first. A sale removes cost in proportion to the
+// units sold.
+function stockCostBasis(symbol) {
+  let units = 0;
+  let cost = 0;
+  [...(state.stockTransactions || [])].reverse().forEach((tx) => {
+    if (tx.symbol !== symbol) return;
+    const shares = Number(tx.shares || 0);
+    if (String(tx.side).toLowerCase().startsWith("bought")) {
+      units += shares;
+      cost += Number(tx.amount || 0);
+    } else if (units > 0) {
+      cost -= cost * Math.min(1, shares / units);
+      units = Math.max(0, units - shares);
+    }
+  });
+  return Math.max(0, cost);
+}
+
+function ownedHoldings() {
+  return stocksCatalog
+    .filter((asset) => Number(state.stockHoldings?.[asset.symbol] || 0) > 0)
+    .map((asset) => {
+      const stock = stockBySymbol(asset.symbol);
+      const units = Number(state.stockHoldings[asset.symbol] || 0);
+      const value = Number.isFinite(stock.price) ? units * stock.price : null;
+      const cost = stockCostBasis(asset.symbol);
+      const changePct = value !== null && cost > 0 ? ((value - cost) / cost) * 100 : null;
+      return { stock, units, value, cost, changePct };
+    });
+}
+
+function openSellPicker() {
+  if (!ownedHoldings().length) return toast("You don't own any crypto or stocks to sell yet");
+  setState({ view: "stockSellPicker" });
+}
+
+function openStockSell(symbol) {
+  if (!Number(state.stockHoldings?.[symbol] || 0)) {
+    return toast(`You do not own any ${stockBySymbol(symbol).name} yet`);
+  }
+  openStockTrade(symbol, "sell");
+}
+
+function renderStockSellPicker() {
+  const holdings = ownedHoldings();
+  return `
+    <section class="stocks-page">
+      <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
+      <header class="stocks-titlebar left">
+        <button class="stocks-back" onclick="openView('stocks')" aria-label="Back">‹</button>
+        <h2>Sell holdings</h2>
+      </header>
+      <p class="stocks-subtitle">Choose which holding to sell. Proceeds go to My Wallet.</p>
+      <section class="stocks-list-card">
+        ${holdings.map(({ stock, units, value, changePct }) => {
+          const up = (changePct ?? 0) >= 0;
+          return `
+            <button class="stocks-portfolio-row sell-pick-row" onclick="openStockSell('${stock.symbol}')" type="button">
+              <span><b>${stock.symbol} · ${escapeHTML(stock.name)}</b><small>${units.toFixed(stock.type === "stock" ? 4 : 8)} ${assetUnit(stock, units)}</small></span>
+              <span class="sell-pick-value">
+                <strong>${value === null ? "Refresh needed" : money(value)}</strong>
+                ${changePct === null ? "" : `<small class="stock-change ${up ? "up" : "down"}">${up ? "▲" : "▼"} ${Math.abs(changePct).toFixed(2)}%</small>`}
+              </span>
+            </button>
+          `;
+        }).join("")}
+      </section>
+    </section>
+  `;
+}
+
+function renderStockSell() {
+  const stock = stockBySymbol(state.selectedStock);
+  const owned = Number(state.stockHoldings?.[stock.symbol] || 0);
+  const hasPrice = Number.isFinite(stock.price);
+  const ownedValue = hasPrice ? owned * stock.price : 0;
+  const unitPrecision = stock.type === "stock" ? 4 : 8;
+  return `
+    <section class="stocks-page">
+      <div class="statusbar"><span>14:19</span><span class="signal"><span>|||</span><span>⌁</span><span class="battery">79</span></span></div>
+      <header class="stocks-titlebar left">
+        <button class="stocks-back" onclick="openSellPicker()" aria-label="Back">‹</button>
+        <h2>Sell ${stock.name}</h2>
+      </header>
+      <form class="stock-trade-form" onsubmit="submitStockTrade(event)">
+        <section class="trade-account-card">
+          <div><span class="stock-logo" style="background:${stock.color}">${stock.symbol[0]}</span><b>You own</b></div>
+          <strong>${owned.toFixed(unitPrecision)} ${stock.symbol}</strong>
+          <p class="muted">Worth ${hasPrice ? peso.format(ownedValue) : "— refresh prices"}${hasPrice ? ` at ${peso.format(stock.price)} per ${stock.unitSingular}` : ""}</p>
+          <label>
+            <span>Sell amount (₱)</span>
+            <input name="amount" inputmode="decimal" type="number" min="1" step="0.01" max="${ownedValue.toFixed(2)}" placeholder="0.00" oninput="updateTradeEstimate(this.value, '${stock.symbol}')" autofocus />
+          </label>
+          <button class="sell-max-btn" type="button" onclick="fillSellMax('${stock.symbol}')">Max ${hasPrice ? peso.format(ownedValue) : ""}</button>
+        </section>
+        <div class="trade-down-arrow">↓</div>
+        <section class="trade-account-card">
+          <div><span class="trade-maya-logo">m</span><b>My Wallet</b></div>
+          <strong>${money(state.wallet)}</strong>
+          <div class="trade-estimate">
+            <span>Sell (estimate)</span>
+            <strong id="tradeEstimate">0 ${stock.symbol}</strong>
+          </div>
+        </section>
+        <button class="stocks-bottom-btn${hasPrice ? "" : " disabled"}" ${hasPrice ? "" : "disabled"} type="submit">Sell ${stock.symbol}</button>
+      </form>
+    </section>
+  `;
+}
+
+function fillSellMax(symbol) {
+  const stock = stockBySymbol(symbol);
+  if (!Number.isFinite(stock.price)) return;
+  const input = document.querySelector('.stock-trade-form input[name="amount"]');
+  if (!input) return;
+  input.value = (Math.floor(Number(state.stockHoldings?.[symbol] || 0) * stock.price * 100) / 100).toFixed(2);
+  updateTradeEstimate(input.value, symbol);
+}
+
+// The sale waiting on the confirm sheet. Kept out of `state` so it is never
+// saved to the wallet row.
+let pendingSell = null;
+
+function openSellConfirmSheet(stock, amount) {
+  const owned = Number(state.stockHoldings?.[stock.symbol] || 0);
+  const ownedValue = owned * stock.price;
+  if (!owned) return toast(`You do not own this ${assetClassLabel(stock)} yet`);
+  if (amount > ownedValue + 0.01) return toast(`You can sell up to ${peso.format(ownedValue)} of ${stock.symbol}`);
+  const sellAll = amount >= ownedValue - 0.01;
+  const units = sellAll ? owned : Number((amount / stock.price).toFixed(stock.type === "stock" ? 6 : 8));
+  const proceeds = sellAll ? Math.floor(ownedValue * 100) / 100 : amount;
+  pendingSell = { symbol: stock.symbol, units, amount: proceeds };
+  modalRoot.className = "modal-root active";
+  modalRoot.setAttribute("aria-hidden", "false");
+  modalRoot.innerHTML = `
+    <div class="scrim" onclick="closeModal()"></div>
+    <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sellConfirmTitle">
+      <h2 id="sellConfirmTitle">Selling ${peso.format(proceeds)} of ${stock.symbol}</h2>
+      <p class="muted">
+        You're selling ${units.toFixed(stock.type === "stock" ? 4 : 8)} ${assetUnit(stock, units)} of ${escapeHTML(stock.name)}
+        at ${peso.format(stock.price)} per ${stock.unitSingular}.
+        ${peso.format(proceeds)} will be added to My Wallet.
+      </p>
+      <div class="sheet-actions">
+        <button class="pill-btn ghost" onclick="closeModal()">Cancel</button>
+        <button class="pill-btn" onclick="confirmStockSell()">Confirm sell</button>
+      </div>
+    </section>
+  `;
+}
+
+// Proceeds go to the wallet, not the Investment Fund: the sale is new cash
+// the user decides what to do with (Shellby shows it as a transaction to
+// label, and A12 can invest it again if it's labelled as income).
+function confirmStockSell() {
+  const pending = pendingSell;
+  pendingSell = null;
+  closeModal();
+  if (!pending) return;
+  const stock = stockBySymbol(pending.symbol);
+  const owned = Number(state.stockHoldings?.[stock.symbol] || 0);
+  if (pending.units > owned + 0.00000001) return toast(`Not enough ${assetActionCopy(stock)} to sell`);
+  state.stockHoldings[stock.symbol] = Number(Math.max(0, owned - pending.units).toFixed(8));
+  state.wallet = Number((Number(state.wallet || 0) + pending.amount).toFixed(2));
+  addStockTransaction("Sold", stock, pending.units, pending.amount);
+  addTransaction(`Sold ${assetClassLabel(stock)}`, `${stock.name} (${stock.symbol}) · To My Wallet`, `+ ${peso.format(pending.amount)}`);
+  saveState();
+  openView("stocks");
+  toast(`Sold ${peso.format(pending.amount)} of ${stock.symbol}`);
 }
 
 function updateTradeEstimate(value, symbol) {
@@ -2466,7 +2630,7 @@ function renderStocksDashboard() {
       </section>
       <div class="stocks-actions">
         <button onclick="openStockTrade('BTC', 'buy')" type="button">+ Buy</button>
-        <button onclick="openStockTrade('BTC', 'sell')" type="button">- Sell</button>
+        <button onclick="openSellPicker()" type="button">- Sell</button>
       </div>
       <div class="stocks-section-head"><b>MY PORTFOLIO</b><span>${holdingCount} assets</span></div>
       ${holdingCount ? renderStockPortfolioRows() : `
@@ -2557,15 +2721,16 @@ function renderStockDetail() {
       </section>
       <div class="stocks-actions sticky">
         <button onclick="openStockTrade('${stock.symbol}', 'buy')" type="button">+ Buy</button>
-        <button onclick="openStockTrade('${stock.symbol}', 'sell')" type="button">- Sell</button>
+        <button onclick="openStockSell('${stock.symbol}')" type="button">- Sell</button>
       </div>
     </section>
   `;
 }
 
 function renderStockTrade() {
+  if (state.stockTradeSide === "sell") return renderStockSell();
   const stock = stockBySymbol(state.selectedStock);
-  const side = state.stockTradeSide || "buy";
+  const side = "buy";
   const owned = Number(state.stockHoldings?.[stock.symbol] || 0);
   const hasPrice = Number.isFinite(stock.price);
   const ownedValue = hasPrice ? owned * stock.price : 0;
@@ -2752,6 +2917,10 @@ function render() {
   }
   if (state.view === "stockTrade") {
     app.innerHTML = renderStockTrade();
+    return;
+  }
+  if (state.view === "stockSellPicker") {
+    app.innerHTML = renderStockSellPicker();
     return;
   }
   if (state.view === "stockHistory") {
