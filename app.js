@@ -97,6 +97,9 @@ let remoteUpdatedAt = null;
 // an older snapshot are dropped instead of written.
 let stateGeneration = 0;
 let saveQueue = Promise.resolve();
+const TRANSACTION_HISTORY_PAGE_SIZE = 5;
+let transactionHistoryVisibleCount = TRANSACTION_HISTORY_PAGE_SIZE;
+let transactionHistoryObserver = null;
 // UI-only fields kept when balances are reloaded underneath the user.
 const LOCAL_UI_KEYS = ["tab", "view", "hidden", "creditView", "loanView", "depositFlow", "stocksFlow"];
 let authMode = "signin";
@@ -670,7 +673,76 @@ function addTransaction(title, detail, amount = "") {
     amount,
     createdAt: new Date().toISOString(),
   });
-  state.transactions = state.transactions.slice(0, 5);
+  // Keep the complete simulated account history. The wallet only renders the
+  // newest five records; the history screen loads older records in pages.
+}
+
+function transactionLine(tx) {
+  return `
+    <div class="transaction-line">
+      <span>${escapeHTML(tx.title)}<strong>${escapeHTML(tx.detail)}</strong></span>
+      <span class="transaction-meta">${escapeHTML(formatTransactionDateTime(tx))}<strong>${escapeHTML(tx.amount)}</strong></span>
+    </div>
+  `;
+}
+
+function openTransactionHistory() {
+  transactionHistoryVisibleCount = TRANSACTION_HISTORY_PAGE_SIZE;
+  setState({ view: "transactions" });
+}
+
+function closeTransactionHistory() {
+  setState({ view: "home" });
+}
+
+function hasMoreTransactions() {
+  return transactionHistoryVisibleCount < state.transactions.length;
+}
+
+function loadMoreTransactions() {
+  if (state.view !== "transactions" || !hasMoreTransactions()) return;
+  const start = transactionHistoryVisibleCount;
+  transactionHistoryVisibleCount = Math.min(
+    start + TRANSACTION_HISTORY_PAGE_SIZE,
+    state.transactions.length,
+  );
+  const list = document.querySelector("#transactionHistoryList");
+  if (list) {
+    list.insertAdjacentHTML(
+      "beforeend",
+      state.transactions.slice(start, transactionHistoryVisibleCount).map(transactionLine).join(""),
+    );
+  }
+  updateTransactionHistoryControls();
+}
+
+function updateTransactionHistoryControls() {
+  const remaining = Math.max(0, state.transactions.length - transactionHistoryVisibleCount);
+  const button = document.querySelector("#loadMoreTransactions");
+  const status = document.querySelector("#transactionHistoryStatus");
+  const sentinel = document.querySelector("#transactionHistorySentinel");
+  if (button) button.hidden = remaining === 0;
+  if (status) {
+    status.textContent = remaining === 0
+      ? `Showing all ${state.transactions.length} transactions`
+      : `Showing ${transactionHistoryVisibleCount} of ${state.transactions.length} transactions`;
+  }
+  if (sentinel) sentinel.hidden = remaining === 0;
+  if (remaining === 0) {
+    transactionHistoryObserver?.disconnect();
+    transactionHistoryObserver = null;
+  }
+}
+
+function observeTransactionHistoryBottom() {
+  transactionHistoryObserver?.disconnect();
+  transactionHistoryObserver = null;
+  const sentinel = document.querySelector("#transactionHistorySentinel");
+  if (!sentinel || !hasMoreTransactions() || !("IntersectionObserver" in window)) return;
+  transactionHistoryObserver = new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting)) loadMoreTransactions();
+  }, { rootMargin: "160px 0px" });
+  transactionHistoryObserver.observe(sentinel);
 }
 
 function openDeleteGoalSheet(goalId = state.selectedGoalId) {
@@ -2221,15 +2293,34 @@ function depositDestinationLabel() {
 }
 
 function transactionsPanel() {
+  const recentTransactions = state.transactions.slice(0, TRANSACTION_HISTORY_PAGE_SIZE);
   return `
     <section class="panel transactions">
-      <div class="transactions-head"><h2>Transactions</h2><button class="green-link" onclick="toast('All transactions opened')">See all</button></div>
-      ${state.transactions.slice(0, 2).map((tx) => `
-        <div class="transaction-line">
-          <span>${escapeHTML(tx.title)}<strong>${escapeHTML(tx.detail)}</strong></span>
-          <span class="transaction-meta">${escapeHTML(formatTransactionDateTime(tx))}<strong>${escapeHTML(tx.amount)}</strong></span>
-        </div>
-      `).join("")}
+      <div class="transactions-head"><h2>Transactions</h2><button class="green-link" onclick="openTransactionHistory()">Show more</button></div>
+      ${recentTransactions.map(transactionLine).join("") || '<p class="muted">No transactions yet.</p>'}
+    </section>
+  `;
+}
+
+function renderTransactionHistory() {
+  const visibleTransactions = state.transactions.slice(0, transactionHistoryVisibleCount);
+  const hasMore = hasMoreTransactions();
+  return `
+    ${topChrome()}
+    <section class="transaction-history-page">
+      <div class="transaction-history-head">
+        <button class="history-back" onclick="closeTransactionHistory()" aria-label="Back to wallet">‹</button>
+        <div><h1>Transaction history</h1><p id="transactionHistoryStatus" class="muted"></p></div>
+      </div>
+      <section id="transactionHistoryList" class="panel transactions transaction-history-list">
+        ${visibleTransactions.map(transactionLine).join("") || '<p class="muted">No transactions yet.</p>'}
+      </section>
+      <div class="transaction-history-controls">
+        <button id="loadMoreTransactions" class="history-load-more" onclick="loadMoreTransactions()" ${hasMore ? "" : "hidden"}>
+          Show 5 more
+        </button>
+        <div id="transactionHistorySentinel" class="transaction-history-sentinel" ${hasMore ? "" : "hidden"} aria-hidden="true"></div>
+      </div>
     </section>
   `;
 }
@@ -2920,6 +3011,8 @@ function toast(message) {
 }
 
 function render() {
+  transactionHistoryObserver?.disconnect();
+  transactionHistoryObserver = null;
   if (booting) {
     app.innerHTML = `
       <section class="login-page">
@@ -2942,6 +3035,12 @@ function render() {
   let content = "";
   if (state.view === "profile") {
     app.innerHTML = renderProfile();
+    return;
+  }
+  if (state.view === "transactions") {
+    app.innerHTML = shell(renderTransactionHistory());
+    updateTransactionHistoryControls();
+    requestAnimationFrame(observeTransactionHistoryBottom);
     return;
   }
   if (state.view === "mySavings") {
